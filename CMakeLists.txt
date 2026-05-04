@@ -4,11 +4,18 @@ project(image-analogies VERSION 0.1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(OpenCV REQUIRED)
-include_directories(${OpenCV_INCLUDE_DIRS})
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/util)
+add_executable(image-analogies 
+    main.cpp 
+    util/arg_parser.cpp 
+    util/gaussian_pyramids.cpp
+    algo/image_analogy.cpp)
 
-add_executable(image-analogies main.cpp util/arg_parser.cpp)
+find_package(OpenCV REQUIRED)
+target_include_directories(image-analogies PRIVATE
+    ${OpenCV_INCLUDE_DIRS} 
+    util
+    algo
+)
 
 target_link_libraries(image-analogies ${OpenCV_LIBS})
 
