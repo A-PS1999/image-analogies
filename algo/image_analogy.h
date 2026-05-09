@@ -1,8 +1,7 @@
 #ifndef IMAGE_ANALOGY_H
 #define IMAGE_ANALOGY_H
 
-#include "opencv2/core.hpp"
-#include <vector>
+#include "feature_vector.h"
 
 namespace ImageAnalogy
 {
@@ -26,6 +25,8 @@ namespace ImageAnalogy
     private:
         float coherenceWeight = 5.0;
         std::vector<cv::Mat> pyramidA, pyramidAPrime, pyramidB, pyramidBPrime;
+        std::vector<FeatureVector> featureVectorsA, featureVectorsAPrime, featureVectorsB, featureVectorsBPrime;
+        std::vector<cv::Vec2i> sourcePixelMapping;
     };
 
 }

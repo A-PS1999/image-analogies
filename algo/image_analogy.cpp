@@ -9,9 +9,9 @@ namespace ImageAnalogy
                                          const std::string &imageBPath,
                                          const float coherenceWeight)
     {
-        cv::Mat imageA = cv::imread(imageAPath);
-        cv::Mat imageAPrime = cv::imread(imageAPrimePath);
-        cv::Mat imageB = cv::imread(imageBPath);
+        cv::Mat imageA = cv::imread(imageAPath, cv::IMREAD_COLOR);
+        cv::Mat imageAPrime = cv::imread(imageAPrimePath, cv::IMREAD_COLOR);
+        cv::Mat imageB = cv::imread(imageBPath, cv::IMREAD_COLOR);
 
         if (imageA.empty() || imageAPrime.empty() || imageB.empty())
         {
@@ -27,6 +27,11 @@ namespace ImageAnalogy
         this->pyramidAPrime = pyramidAPrime;
         this->pyramidB = pyramidB;
         this->coherenceWeight = coherenceWeight;
+        this->sourcePixelMapping.resize(imageB.cols * imageB.rows);
+
+        FeatureVectorExtractor::computeFullPyramidFeatures(pyramidA, featureVectorsA);
+        FeatureVectorExtractor::computeFullPyramidFeatures(pyramidAPrime, featureVectorsAPrime);
+        FeatureVectorExtractor::computeFullPyramidFeatures(pyramidB, featureVectorsB);
     }
 
     cv::Mat ImageAnalogyMaker::generateAnalogy()
