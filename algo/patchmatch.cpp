@@ -77,34 +77,123 @@ namespace PatchMatch
         Down
     };
 
-    void propagate(int width,
+    void propagate(const cv::Mat &imageA,
+                   const cv::Mat &imageB,
                    cv::Point2i patchPos,
                    std::vector<cv::Point2i> &nnf,
                    std::vector<float> &dists,
                    int patchSize,
                    int iterNum)
     {
+        int width = imageB.cols;
         bool isEven = iterNum % 2 == 0;
+        int idx = patchPos.y * width + patchPos.x;
 
         if (!isEven)
         {
-            auto leftDist = std::make_pair(dists[patchPos.y * width + std::max(patchPos.x - 1, 0)],
-                                            Source::Left);
-            auto upDist = std::make_pair(dists[std::max(patchPos.y - 1, 0) * width + patchPos.x],
-                                          Source::Up);
-            auto currDist = std::make_pair(dists[patchPos.y * width + patchPos.x], Source::Current);
+            std::vector<std::pair<float, Source>> candidates;
 
-            auto minPair = std::min({leftDist, upDist, currDist}, [](const auto &a, const auto &b){
-                return a.first < b.first;
-            });
-            
-            float minDist = minPair.first;
+            candidates.push_back({dists[idx], Source::Current});
+
+            if (patchPos.x > 0)
+            {
+                candidates.push_back({dists[patchPos.y * width + (patchPos.x - 1)], Source::Left});
+            }
+
+            if (patchPos.y > 0)
+            {
+                candidates.push_back({dists[(patchPos.y - 1) * width + patchPos.x], Source::Up});
+            }
+
+            auto minPair = *std::min_element(candidates.begin(), candidates.end(),
+                                             [](const auto &a, const auto &b)
+                                             { return a.first < b.first; });
+
             Source minDistSrc = minPair.second;
 
-            // Todo continue propagation logic
+            if (minDistSrc == Source::Left)
+            {
+                cv::Point2i candidateMatch = nnf[patchPos.y * width + (patchPos.x - 1)];
+                float newDist = computePatchDistance(imageA, imageB, patchPos, candidateMatch, patchSize);
+                if (newDist < dists[idx])
+                {
+                    nnf[idx] = candidateMatch;
+                    dists[idx] = newDist;
+                }
+            }
+            else if (minDistSrc == Source::Up)
+            {
+                cv::Point2i candidateMatch = nnf[(patchPos.y - 1) * width + patchPos.x];
+                float newDist = computePatchDistance(imageA, imageB, patchPos, candidateMatch, patchSize);
+                if (newDist < dists[idx])
+                {
+                    nnf[idx] = candidateMatch;
+                    dists[idx] = newDist;
+                }
+            }
         }
         else
         {
+            std::vector<std::pair<float, Source>> candidates;
+
+            candidates.push_back({dists[idx], Source::Current});
+
+            if (patchPos.x < imageB.cols - 1)
+            {
+                candidates.push_back({dists[patchPos.y * width + (patchPos.x + 1)], Source::Right});
+            }
+
+            if (patchPos.y < imageB.rows - 1)
+            {
+                candidates.push_back({dists[(patchPos.y + 1) * width + patchPos.x], Source::Down});
+            }
+
+            auto minPair = *std::min_element(candidates.begin(), candidates.end(),
+                                             [](const auto &a, const auto &b)
+                                             { return a.first < b.first; });
+
+            Source minDistSrc = minPair.second;
+
+            if (minDistSrc == Source::Right)
+            {
+                cv::Point2i candidateMatch = nnf[patchPos.y * width + (patchPos.x + 1)];
+                float newDist = computePatchDistance(imageA, imageB, patchPos, candidateMatch, patchSize);
+                if (newDist < dists[idx])
+                {
+                    nnf[idx] = candidateMatch;
+                    dists[idx] = newDist;
+                }
+            }
+            else if (minDistSrc == Source::Down)
+            {
+                cv::Point2i candidateMatch = nnf[(patchPos.y + 1) * width + patchPos.x];
+                float newDist = computePatchDistance(imageA, imageB, patchPos, candidateMatch, patchSize);
+                if (newDist < dists[idx])
+                {
+                    nnf[idx] = candidateMatch;
+                    dists[idx] = newDist;
+                }
+            }
         }
+    }
+
+    void randomSearch(cv::Mat &imageA,
+                      cv::Mat &imageB,
+                      cv::Point2i patchPos,
+                      std::vector<cv::Point2i> &nnf,
+                      std::vector<float> &dists,
+                      int patchSize,
+                      float alpha = 0.5)
+    {
+        int img_width = imageB.cols;
+        int img_height = imageB.rows;
+
+        int searchRadius = patchSize / 2;
+        int i_param = 4;
+        int search_height = img_height * std::pow(alpha, i_param);
+        int search_width = img_width * std::pow(alpha, i_param);
+
+        cv::Point2i currPoint = nnf[patchPos.y * img_width + patchPos.x];
+        // TODO continue random search fun implementation
     }
 }

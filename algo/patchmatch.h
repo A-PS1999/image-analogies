@@ -16,7 +16,8 @@ namespace PatchMatch
                                cv::Point2i posA,
                                cv::Point2i posB,
                                int patchSize);
-    void propagate(int width,
+    void propagate(const cv::Mat &imageA,
+                   const cv::Mat &imageB,
                    cv::Point2i patchPos,
                    std::vector<cv::Point2i> &nnf,
                    std::vector<float> &dists,
@@ -24,10 +25,11 @@ namespace PatchMatch
                    int iterNum);
     void randomSearch(cv::Mat &imageA,
                       cv::Mat &imageB,
+                      cv::Point2i patchPos,
                       std::vector<cv::Point2i> &nnf,
                       std::vector<float> &dists,
-                      int searchRadius,
-                      int patchSize);
+                      int patchSize,
+                      float alpha = 0.5);
 } // namespace PatchMatch
 
 #endif // PATCHMATCH_H
