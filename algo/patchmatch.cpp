@@ -188,12 +188,37 @@ namespace PatchMatch
         int img_width = imageB.cols;
         int img_height = imageB.rows;
 
-        int searchRadius = patchSize / 2;
-        int i_param = 4;
-        int search_height = img_height * std::pow(alpha, i_param);
-        int search_width = img_width * std::pow(alpha, i_param);
+        std::uniform_real_distribution<float> range(-1.0f, 1.0f);
+        std::random_device randDevice;
+        std::mt19937 generator(randDevice());
 
-        cv::Point2i currPoint = nnf[patchPos.y * img_width + patchPos.x];
-        // TODO continue random search fun implementation
+        float current_radius = std::max(img_height, img_width);
+        int i_param = 1;
+
+        cv::Point2i currBestPoint = nnf[patchPos.y * img_width + patchPos.x];
+        float currBestDist = dists[patchPos.y * img_width + patchPos.x];
+        
+        while (current_radius > 1.0f) {
+            float randX = range(generator);
+            float randY = range(generator);
+
+            cv::Point2i candidatePos;
+            candidatePos.x = currBestPoint.x + (current_radius * randX);
+            candidatePos.x = std::max(0, std::min(img_width - 1, candidatePos.x));
+            candidatePos.y = currBestPoint.y + (current_radius * randY);
+            candidatePos.y = std::max(0, std::min(img_height - 1, candidatePos.y));
+
+            float candidateDist = computePatchDistance(imageA, imageB, patchPos, candidatePos, patchSize);
+            if (candidateDist < currBestDist) {
+                currBestDist = candidateDist;
+                currBestPoint = candidatePos;
+            }
+
+            current_radius *= std::pow(alpha, i_param);
+            i_param += 1;
+        }
+
+        nnf[patchPos.y * img_width + patchPos.x] = currBestPoint;
+        dists[patchPos.y * img_width + patchPos.x] = currBestDist;
     }
 }
