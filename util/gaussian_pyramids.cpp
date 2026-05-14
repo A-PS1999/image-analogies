@@ -27,5 +27,18 @@ namespace Util
                                          " for the specified number of pyramid levels (" + std::to_string(levels) + ").");
             }
         }
+
+        void buildEmptyPyramid(const std::vector<cv::Mat> &reference, std::vector<cv::Mat> &dest)
+        {
+            int numLevels = reference.size();
+            
+            for (int l = 0; l < numLevels; ++l)
+            {
+                cv::Mat newLevel;
+                cv::Mat currLvlRef = reference[l];
+                newLevel.create(currLvlRef.size(), currLvlRef.type());
+                dest.push_back(newLevel);
+            }
+        }
     } // namespace GaussianPyramids
 } // namespace Util
