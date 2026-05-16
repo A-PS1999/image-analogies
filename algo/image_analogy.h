@@ -16,6 +16,8 @@ namespace ImageAnalogy
     class ImageAnalogyMaker
     {
     public:
+        const int FINE_PATCH_SIZE = 5;
+        const int COARSE_PATCH_SIZE = 3;
         ImageAnalogyMaker(const std::string &imageAPath,
                           const std::string &imageAPrimePath,
                           const std::string &imageBPath,
@@ -32,7 +34,7 @@ namespace ImageAnalogy
         cv::Point2i bestMatch(int currLvl, cv::Point2i currQ);
         cv::Point2i bestApproximateMatch(int currLvl, cv::Point2i currQ);
         cv::Point2i bestCoherenceMatch(int currLvl, cv::Point2i currQ);
-        float featureDistance(cv::Point2i currQ, cv::Point2i comparisonP);
+        float featureDistance(int currLvl, cv::Point2i currQ, cv::Point2i comparisonP);
     };
 
 }

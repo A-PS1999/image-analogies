@@ -1,5 +1,6 @@
 #include "image_analogy.h"
 #include "gaussian_pyramids.h"
+#include "patchmatch.h"
 #include "opencv2/imgcodecs.hpp"
 
 namespace ImageAnalogy
@@ -49,40 +50,161 @@ namespace ImageAnalogy
                 int x = q % cols;
                 int y = q / cols;
                 cv::Point2i currQ(x, y);
-                
-                bestMatch(l, currQ);
+                int linearPosQ = y * cols + x;
+
+                cv::Point2i matchPoint = bestMatch(l, currQ);
+                featureVectorsBPrime[l].features[linearPosQ] =
+                    featureVectorsAPrime[l].features[matchPoint.y * cols + matchPoint.x];
+                    sourcePixelMapping[linearPosQ] = matchPoint;
             }
         }
+
+        return pyramidBPrime.front();
     }
 
-    cv::Point2i bestMatch(int currLvl, int maxLevels, float cohWeight, cv::Point2i currQ)
+    cv::Point2i ImageAnalogyMaker::bestMatch(int currLvl, cv::Point2i currQ)
     {
+        int maxLevels = pyramidB.size();
+        float cohWeight = coherenceWeight;
         cv::Point2i bestApproxMatch = bestApproximateMatch(currLvl, currQ);
         cv::Point2i bestCohMatch = bestCoherenceMatch(currLvl, currQ);
 
-        float distApprox = featureDistance(currQ, bestApproxMatch);
-        float distCoherence = featureDistance(currQ, bestCohMatch);
+        float distApprox = featureDistance(currLvl, currQ, bestApproxMatch);
+        float distCoherence = featureDistance(currLvl, currQ, bestCohMatch);
 
         float factorial = 1 + std::pow(2, (currLvl - maxLevels)) * cohWeight;
 
-        if (distCoherence <= distApprox * factorial) {
+        if (distCoherence <= distApprox * factorial)
+        {
             return bestCohMatch;
-        } else {
+        }
+        else
+        {
             return bestApproxMatch;
         }
     }
 
-    cv::Point2i bestApproximateMatch(int currLvl, cv::Point2i currQ)
+    cv::Point2i ImageAnalogyMaker::bestApproximateMatch(int currLvl, cv::Point2i currQ)
     {
-        // TODO implement approximage match function logic using PatchMatch
+        int widthA = pyramidA[currLvl].cols;
+        int heightA = pyramidA[currLvl].rows;
+        int widthB = pyramidB[currLvl].cols;
+        int heightB = pyramidB[currLvl].rows;
+
+        std::vector<cv::Point2i> nnf = PatchMatch::initNNFRandom(widthB, heightB, widthA, heightA);
+        std::vector<float> dists = PatchMatch::initNNFDists(pyramidB[currLvl], pyramidA[currLvl], nnf, FINE_PATCH_SIZE);
+
+        int numIterations = 5;
+        for (int iter = 0; iter < numIterations; ++iter)
+        {
+            // Propagation phase
+            for (int y = 0; y < heightB; ++y)
+            {
+                for (int x = 0; x < widthB; ++x)
+                {
+                    PatchMatch::propagate(pyramidB[currLvl], pyramidA[currLvl],
+                                          cv::Point2i(x, y), nnf, dists, FINE_PATCH_SIZE, iter);
+                }
+            }
+
+            // Random search phase
+            for (int y = 0; y < heightB; ++y)
+            {
+                for (int x = 0; x < widthB; ++x)
+                {
+                    PatchMatch::randomSearch(pyramidB[currLvl], pyramidA[currLvl],
+                                             cv::Point2i(x, y), nnf, dists, FINE_PATCH_SIZE);
+                }
+            }
+        }
+
+        // Store the best match for currQ in sourcePixelMapping: s(q) = p
+        int linearPosQ = currQ.y * widthB + currQ.x;
+        cv::Point2i bestMatch = nnf[linearPosQ];
+        sourcePixelMapping[linearPosQ] = bestMatch;
+
+        return bestMatch;
     }
 
-    cv::Point2i bestCoherenceMatch(int currLvl, cv::Point2i currQ)
+    cv::Point2i ImageAnalogyMaker::bestCoherenceMatch(int currLvl, cv::Point2i currQ)
     {
-        // TODO implement coherence match logic
+        cv::Point2i rStar;
+        float minDistance = std::numeric_limits<float>::max();
+
+        int width = pyramidB[currLvl].cols;
+        int height = pyramidB[currLvl].rows;
+        int linearPosQ = currQ.y * width + currQ.x;
+
+        for (int dy = -FINE_PATCH_SIZE; dy <= FINE_PATCH_SIZE; ++dy)
+        {
+            for (int dx = -FINE_PATCH_SIZE; dx <= FINE_PATCH_SIZE; ++dx)
+            {
+                int rX = currQ.x + dx;
+                int rY = currQ.y + dy;
+
+                if (rX < 0 || rX >= width || rY < 0 || rY >= height)
+                {
+                    continue;
+                }
+
+                int linearPosR = rY * width + rX;
+
+                // Only consider pixels r that have already been synthesized (earlier in scan)
+                if (linearPosR >= linearPosQ)
+                {
+                    continue;
+                }
+
+                cv::Point2i sourceR = sourcePixelMapping[linearPosR];
+
+                // s(r) + (q - r)
+                cv::Point2i candidateP = sourceR + (currQ - cv::Point2i(rX, rY));
+
+                candidateP.x = std::clamp(candidateP.x, 0, width - 1);
+                candidateP.y = std::clamp(candidateP.y, 0, height - 1);
+
+                // ||F(s(r) + (q - r)) - F(q)||^2
+                float distance = featureDistance(currLvl, currQ, candidateP);
+
+                // Track the best (minimum distance) match
+                if (distance < minDistance)
+                {
+                    minDistance = distance;
+                    rStar = sourceR;
+                }
+            }
+        }
+
+        int linearPosRStar = rStar.y * width + rStar.x;
+
+        return sourcePixelMapping[linearPosRStar] + (currQ - rStar);
     }
 
-    float featureDistance(cv::Point2i currQ, cv::Point2i comparisonP) {
-        // Implement feature vector distance logic
+    float ImageAnalogyMaker::featureDistance(int currLvl, cv::Point2i currQ, cv::Point2i comparisonP)
+    {
+        const int VEC_SIZE = (FINE_PATCH_SIZE * FINE_PATCH_SIZE * 4) + (COARSE_PATCH_SIZE * COARSE_PATCH_SIZE * 4);
+
+        int width = pyramidB[currLvl].cols;
+
+        size_t qIndex = (static_cast<size_t>(currQ.y) * width + currQ.x) * VEC_SIZE;
+        size_t pIndex = (static_cast<size_t>(comparisonP.y) * width + comparisonP.x) * VEC_SIZE;
+
+        const float *pFeaturesA = &featureVectorsA[currLvl].features[pIndex];
+        const float *pFeaturesAPrime = &featureVectorsAPrime[currLvl].features[pIndex];
+        const float *qFeaturesB = &featureVectorsB[currLvl].features[qIndex];
+        const float *qFeaturesBPrime = &featureVectorsBPrime[currLvl].features[qIndex];
+
+        float distanceSquared = 0.0f;
+
+        for (int i = 0; i < VEC_SIZE; ++i)
+        {
+            float diffAB = pFeaturesA[i] - qFeaturesB[i];
+            distanceSquared += diffAB * diffAB;
+
+            float diffAPrimeBPrime = pFeaturesAPrime[i] - qFeaturesBPrime[i];
+            distanceSquared += diffAPrimeBPrime * diffAPrimeBPrime;
+        }
+
+        return distanceSquared;
     }
 }
