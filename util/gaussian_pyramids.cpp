@@ -5,26 +5,37 @@ namespace Util
 {
     namespace GaussianPyramids
     {
+        int getPaddedSize(int originalSize, int divisibilityFactor)
+        {
+            int remainder = originalSize % divisibilityFactor;
+            if (remainder == 0)
+                return originalSize;
+            return originalSize + (divisibilityFactor - remainder);
+        }
+
         void buildPyramid(const cv::Mat &input, std::vector<cv::Mat> &pyramid, int levels)
         {
             int divisibilityFactor = 1 << levels;
 
-            if (input.cols % divisibilityFactor == 0 && input.rows % divisibilityFactor == 0)
-            {
-                // First we push back the original image before downsampling
-                pyramid.push_back(input);
+            int paddedWidth = getPaddedSize(input.cols, divisibilityFactor);
+            int paddedHeight = getPaddedSize(input.rows, divisibilityFactor);
 
-                for (int i = 0; i < levels; i++)
-                {
-                    cv::Mat downsampled;
-                    cv::pyrDown(pyramid.back(), downsampled);
-                    pyramid.push_back(downsampled);
-                }
-            }
-            else
+            cv::Mat paddedInput = input.clone();
+            if (paddedWidth != input.cols || paddedHeight != input.rows)
             {
-                throw std::runtime_error("Input image dimensions must be divisible by " + std::to_string(divisibilityFactor) +
-                                         " for the specified number of pyramid levels (" + std::to_string(levels) + ").");
+                int padRight = paddedWidth - input.cols;
+                int padBottom = paddedHeight - input.rows;
+                cv::copyMakeBorder(input, paddedInput, 0, padBottom, 0, padRight, cv::BORDER_REPLICATE);
+            }
+
+            // First we push back the padded image before downsampling
+            pyramid.push_back(paddedInput);
+
+            for (int i = 0; i < levels; i++)
+            {
+                cv::Mat downsampled;
+                cv::pyrDown(pyramid.back(), downsampled);
+                pyramid.push_back(downsampled);
             }
         }
 

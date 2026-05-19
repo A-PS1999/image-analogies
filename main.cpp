@@ -1,6 +1,7 @@
 #include "../util/arg_parser.h"
 #include "../algo/image_analogy.h"
 #include "opencv2/imgcodecs.hpp"
+#include <iostream>
 
 int main(int argc, char **argv)
 {
@@ -24,6 +25,8 @@ int main(int argc, char **argv)
         imageBPath,
         coherenceWeight
     );
+
+    std::cout << "Generating image analogy...\n";
 
     cv::Mat generatedResult = analogyMaker.generateAnalogy();
     cv::imwrite("outputBPrime.png", generatedResult);

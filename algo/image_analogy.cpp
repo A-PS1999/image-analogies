@@ -2,6 +2,7 @@
 #include "gaussian_pyramids.h"
 #include "patchmatch.h"
 #include "opencv2/imgcodecs.hpp"
+#include <algorithm>
 
 namespace ImageAnalogy
 {
@@ -19,6 +20,9 @@ namespace ImageAnalogy
             throw std::runtime_error("One or more input images could not be loaded. Please check file paths.");
         }
 
+        this->originalBWidth = imageB.cols;
+        this->originalBHeight = imageB.rows;
+
         std::vector<cv::Mat> pyramidA, pyramidAPrime, pyramidB, pyramidBPrime;
         Util::GaussianPyramids::buildPyramid(imageA, pyramidA);
         Util::GaussianPyramids::buildPyramid(imageAPrime, pyramidAPrime);
@@ -29,7 +33,7 @@ namespace ImageAnalogy
         this->pyramidAPrime = pyramidAPrime;
         this->pyramidB = pyramidB;
         this->coherenceWeight = coherenceWeight;
-        this->sourcePixelMapping.resize(imageB.cols * imageB.rows);
+        this->sourcePixelMapping.resize(pyramidB[0].cols * pyramidB[0].rows);
 
         FeatureVectorExtractor::computeFullPyramidFeatures(pyramidA, featureVectorsA);
         FeatureVectorExtractor::computeFullPyramidFeatures(pyramidAPrime, featureVectorsAPrime);
@@ -59,7 +63,15 @@ namespace ImageAnalogy
             }
         }
 
-        return pyramidBPrime.front();
+        // Crop result back to original B dimensions if padding was applied
+        cv::Mat result = pyramidBPrime.front();
+        if (result.cols != originalBWidth || result.rows != originalBHeight)
+        {
+            cv::Rect cropRect(0, 0, originalBWidth, originalBHeight);
+            result = result(cropRect).clone();
+        }
+
+        return result;
     }
 
     cv::Point2i ImageAnalogyMaker::bestMatch(int currLvl, cv::Point2i currQ)

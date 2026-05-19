@@ -31,6 +31,7 @@ namespace ImageAnalogy
         std::vector<cv::Point2i> sourcePixelMapping;
         std::vector<cv::Point2i> nearestNeighbourField;
         std::vector<float> nearestNeighbourDistances;
+        int originalBWidth = 0, originalBHeight = 0;
         cv::Point2i bestMatch(int currLvl, cv::Point2i currQ);
         cv::Point2i bestApproximateMatch(int currLvl, cv::Point2i currQ);
         cv::Point2i bestCoherenceMatch(int currLvl, cv::Point2i currQ);

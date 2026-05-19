@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10.0)
 project(image-analogies VERSION 0.1.0 LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -9,6 +9,8 @@ add_executable(image-analogies
     main.cpp 
     util/arg_parser.cpp 
     util/gaussian_pyramids.cpp
+    algo/patchmatch.cpp
+    algo/feature_vector.cpp
     algo/image_analogy.cpp)
 
 find_package(OpenCV REQUIRED)

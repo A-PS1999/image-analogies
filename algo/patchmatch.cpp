@@ -1,5 +1,6 @@
 #include "patchmatch.h"
 #include <random>
+#include <algorithm>
 
 namespace PatchMatch
 {
@@ -23,7 +24,7 @@ namespace PatchMatch
 
     std::vector<float> initNNFDists(const cv::Mat &imageA,
                                     const cv::Mat &imageB,
-                                    const std::vector<cv::Vec2i> &nnf,
+                                    const std::vector<cv::Point2i> &nnf,
                                     int patchSize)
     {
         int width = imageB.cols;
@@ -183,7 +184,7 @@ namespace PatchMatch
                       std::vector<cv::Point2i> &nnf,
                       std::vector<float> &dists,
                       int patchSize,
-                      float alpha = 0.5)
+                      float alpha)
     {
         int img_width = imageB.cols;
         int img_height = imageB.rows;
