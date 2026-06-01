@@ -32,33 +32,36 @@ namespace ImageAnalogy
         this->pyramidA = pyramidA;
         this->pyramidAPrime = pyramidAPrime;
         this->pyramidB = pyramidB;
+        this->pyramidBPrime = pyramidBPrime;
         this->coherenceWeight = coherenceWeight;
         this->sourcePixelMapping.resize(pyramidB[0].cols * pyramidB[0].rows);
 
         FeatureVectorExtractor::computeFullPyramidFeatures(pyramidA, featureVectorsA);
         FeatureVectorExtractor::computeFullPyramidFeatures(pyramidAPrime, featureVectorsAPrime);
         FeatureVectorExtractor::computeFullPyramidFeatures(pyramidB, featureVectorsB);
+        FeatureVectorExtractor::computeFullPyramidFeatures(pyramidBPrime, featureVectorsBPrime);
     }
 
     cv::Mat ImageAnalogyMaker::generateAnalogy()
     {
         int numLevels = pyramidB.size();
 
-        for (int l = numLevels; l >= 0; --l)
+        for (int l = numLevels - 1; l >= 0; --l)
         {
             int lvlLength = pyramidBPrime[l].cols * pyramidBPrime[l].rows;
 
             for (int q = 0; q < lvlLength; ++q)
             {
-                int cols = pyramidBPrime[l].cols;
-                int x = q % cols;
-                int y = q / cols;
+                int colsB = pyramidBPrime[l].cols;
+                int x = q % colsB;
+                int y = q / colsB;
                 cv::Point2i currQ(x, y);
-                int linearPosQ = y * cols + x;
+                int linearPosQ = y * colsB + x;
 
                 cv::Point2i matchPoint = bestMatch(l, currQ);
+                int colsA = pyramidA[l].cols;
                 featureVectorsBPrime[l].features[linearPosQ] =
-                    featureVectorsAPrime[l].features[matchPoint.y * cols + matchPoint.x];
+                    featureVectorsAPrime[l].features[matchPoint.y * colsA + matchPoint.x];
                     sourcePixelMapping[linearPosQ] = matchPoint;
             }
         }
@@ -143,9 +146,11 @@ namespace ImageAnalogy
         cv::Point2i rStar;
         float minDistance = std::numeric_limits<float>::max();
 
-        int width = pyramidB[currLvl].cols;
-        int height = pyramidB[currLvl].rows;
-        int linearPosQ = currQ.y * width + currQ.x;
+        int widthB = pyramidB[currLvl].cols;
+        int heightB = pyramidB[currLvl].rows;
+        int widthA = pyramidA[currLvl].cols;
+        int heightA = pyramidA[currLvl].rows;
+        int linearPosQ = currQ.y * widthB + currQ.x;
 
         for (int dy = -FINE_PATCH_SIZE; dy <= FINE_PATCH_SIZE; ++dy)
         {
@@ -154,12 +159,12 @@ namespace ImageAnalogy
                 int rX = currQ.x + dx;
                 int rY = currQ.y + dy;
 
-                if (rX < 0 || rX >= width || rY < 0 || rY >= height)
+                if (rX < 0 || rX >= widthB || rY < 0 || rY >= heightB)
                 {
                     continue;
                 }
 
-                int linearPosR = rY * width + rX;
+                int linearPosR = rY * widthB + rX;
 
                 // Only consider pixels r that have already been synthesized (earlier in scan)
                 if (linearPosR >= linearPosQ)
@@ -172,8 +177,8 @@ namespace ImageAnalogy
                 // s(r) + (q - r)
                 cv::Point2i candidateP = sourceR + (currQ - cv::Point2i(rX, rY));
 
-                candidateP.x = std::clamp(candidateP.x, 0, width - 1);
-                candidateP.y = std::clamp(candidateP.y, 0, height - 1);
+                candidateP.x = std::clamp(candidateP.x, 0, widthA - 1);
+                candidateP.y = std::clamp(candidateP.y, 0, heightA - 1);
 
                 // ||F(s(r) + (q - r)) - F(q)||^2
                 float distance = featureDistance(currLvl, currQ, candidateP);
@@ -182,24 +187,23 @@ namespace ImageAnalogy
                 if (distance < minDistance)
                 {
                     minDistance = distance;
-                    rStar = sourceR;
+                    rStar = candidateP;
                 }
             }
         }
 
-        int linearPosRStar = rStar.y * width + rStar.x;
-
-        return sourcePixelMapping[linearPosRStar] + (currQ - rStar);
+        return rStar;
     }
 
     float ImageAnalogyMaker::featureDistance(int currLvl, cv::Point2i currQ, cv::Point2i comparisonP)
     {
         const int VEC_SIZE = (FINE_PATCH_SIZE * FINE_PATCH_SIZE * 4) + (COARSE_PATCH_SIZE * COARSE_PATCH_SIZE * 4);
 
-        int width = pyramidB[currLvl].cols;
+        int widthB = pyramidB[currLvl].cols;
+        int widthA = pyramidA[currLvl].cols;
 
-        size_t qIndex = (static_cast<size_t>(currQ.y) * width + currQ.x) * VEC_SIZE;
-        size_t pIndex = (static_cast<size_t>(comparisonP.y) * width + comparisonP.x) * VEC_SIZE;
+        size_t qIndex = (static_cast<size_t>(currQ.y) * widthB + currQ.x) * VEC_SIZE;
+        size_t pIndex = (static_cast<size_t>(comparisonP.y) * widthA + comparisonP.x) * VEC_SIZE;
 
         const float *pFeaturesA = &featureVectorsA[currLvl].features[pIndex];
         const float *pFeaturesAPrime = &featureVectorsAPrime[currLvl].features[pIndex];

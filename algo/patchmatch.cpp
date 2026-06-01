@@ -4,19 +4,19 @@
 
 namespace PatchMatch
 {
-    std::vector<cv::Point2i> initNNFRandom(int widthA, int heightA, int widthB, int heightB)
+    std::vector<cv::Point2i> initNNFRandom(int widthB, int heightB, int widthA, int heightA)
     {
         std::vector<cv::Point2i> nnf(widthB * heightB);
         std::random_device randDevice;
         std::mt19937 generator(randDevice());
-        std::uniform_int_distribution<> distX(0, widthB - 1);
-        std::uniform_int_distribution<> distY(0, heightB - 1);
+        std::uniform_int_distribution<> distX(0, widthA - 1);
+        std::uniform_int_distribution<> distY(0, heightA - 1);
 
-        for (int y = 0; y < heightA; ++y)
+        for (int y = 0; y < heightB; ++y)
         {
-            for (int x = 0; x < widthA; ++x)
+            for (int x = 0; x < widthB; ++x)
             {
-                nnf[y * widthA + x] = cv::Point2i(distX(generator), distY(generator));
+                nnf[y * widthB + x] = cv::Point2i(distX(generator), distY(generator));
             }
         }
         return nnf;

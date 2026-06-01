@@ -29,6 +29,7 @@ int main(int argc, char **argv)
     std::cout << "Generating image analogy...\n";
 
     cv::Mat generatedResult = analogyMaker.generateAnalogy();
+    std::cout << "Generation complete. Writing...\n";
     cv::imwrite("outputBPrime.png", generatedResult);
 
     return 0;
