@@ -3,6 +3,7 @@
 #include "patchmatch.h"
 #include "opencv2/imgcodecs.hpp"
 #include <algorithm>
+#include <iostream>
 
 namespace ImageAnalogy
 {
@@ -35,11 +36,13 @@ namespace ImageAnalogy
         this->pyramidBPrime = pyramidBPrime;
         this->coherenceWeight = coherenceWeight;
         this->sourcePixelMapping.resize(pyramidB[0].cols * pyramidB[0].rows);
+        this->levelNNF.resize(pyramidB.size());
+        this->levelNNFDists.resize(pyramidB.size());
 
         FeatureVectorExtractor::computeFullPyramidFeatures(pyramidA, featureVectorsA);
         FeatureVectorExtractor::computeFullPyramidFeatures(pyramidAPrime, featureVectorsAPrime);
         FeatureVectorExtractor::computeFullPyramidFeatures(pyramidB, featureVectorsB);
-        FeatureVectorExtractor::computeFullPyramidFeatures(pyramidBPrime, featureVectorsBPrime);
+        featureVectorsBPrime = featureVectorsB;
     }
 
     cv::Mat ImageAnalogyMaker::generateAnalogy()
@@ -48,25 +51,28 @@ namespace ImageAnalogy
 
         for (int l = numLevels - 1; l >= 0; --l)
         {
+            computeApproximateMatchesForLevel(l);
+
             int lvlLength = pyramidBPrime[l].cols * pyramidBPrime[l].rows;
+            int colsB = pyramidBPrime[l].cols;
+            int colsA = pyramidA[l].cols;
 
             for (int q = 0; q < lvlLength; ++q)
             {
-                int colsB = pyramidBPrime[l].cols;
                 int x = q % colsB;
                 int y = q / colsB;
                 cv::Point2i currQ(x, y);
-                int linearPosQ = y * colsB + x;
 
                 cv::Point2i matchPoint = bestMatch(l, currQ);
-                int colsA = pyramidA[l].cols;
-                featureVectorsBPrime[l].features[linearPosQ] =
+                featureVectorsBPrime[l].features[q] =
                     featureVectorsAPrime[l].features[matchPoint.y * colsA + matchPoint.x];
-                    sourcePixelMapping[linearPosQ] = matchPoint;
+                sourcePixelMapping[q] = matchPoint;
+                
+                cv::Vec3b pixelValue = pyramidAPrime[l].at<cv::Vec3b>(matchPoint.y, matchPoint.x);
+                pyramidBPrime[l].at<cv::Vec3b>(y, x) = pixelValue;
             }
         }
 
-        // Crop result back to original B dimensions if padding was applied
         cv::Mat result = pyramidBPrime.front();
         if (result.cols != originalBWidth || result.rows != originalBHeight)
         {
@@ -99,7 +105,7 @@ namespace ImageAnalogy
         }
     }
 
-    cv::Point2i ImageAnalogyMaker::bestApproximateMatch(int currLvl, cv::Point2i currQ)
+    void ImageAnalogyMaker::computeApproximateMatchesForLevel(int currLvl)
     {
         int widthA = pyramidA[currLvl].cols;
         int heightA = pyramidA[currLvl].rows;
@@ -133,12 +139,16 @@ namespace ImageAnalogy
             }
         }
 
-        // Store the best match for currQ in sourcePixelMapping: s(q) = p
-        int linearPosQ = currQ.y * widthB + currQ.x;
-        cv::Point2i bestMatch = nnf[linearPosQ];
-        sourcePixelMapping[linearPosQ] = bestMatch;
+        // Cache the computed NNF and distances for this level
+        levelNNF[currLvl] = nnf;
+        levelNNFDists[currLvl] = dists;
+    }
 
-        return bestMatch;
+    cv::Point2i ImageAnalogyMaker::bestApproximateMatch(int currLvl, cv::Point2i currQ)
+    {
+        int widthB = pyramidB[currLvl].cols;
+        int linearPosQ = currQ.y * widthB + currQ.x;
+        return levelNNF[currLvl][linearPosQ];
     }
 
     cv::Point2i ImageAnalogyMaker::bestCoherenceMatch(int currLvl, cv::Point2i currQ)
@@ -166,7 +176,7 @@ namespace ImageAnalogy
 
                 int linearPosR = rY * widthB + rX;
 
-                // Only consider pixels r that have already been synthesized (earlier in scan)
+                // Skip pixels r that are not before q in scan order
                 if (linearPosR >= linearPosQ)
                 {
                     continue;
@@ -183,7 +193,6 @@ namespace ImageAnalogy
                 // ||F(s(r) + (q - r)) - F(q)||^2
                 float distance = featureDistance(currLvl, currQ, candidateP);
 
-                // Track the best (minimum distance) match
                 if (distance < minDistance)
                 {
                     minDistance = distance;

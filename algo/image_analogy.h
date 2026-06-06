@@ -29,12 +29,13 @@ namespace ImageAnalogy
         std::vector<cv::Mat> pyramidA, pyramidAPrime, pyramidB, pyramidBPrime;
         std::vector<FeatureVector> featureVectorsA, featureVectorsAPrime, featureVectorsB, featureVectorsBPrime;
         std::vector<cv::Point2i> sourcePixelMapping;
-        std::vector<cv::Point2i> nearestNeighbourField;
-        std::vector<float> nearestNeighbourDistances;
+        std::vector<std::vector<cv::Point2i>> levelNNF;
+        std::vector<std::vector<float>> levelNNFDists;
         int originalBWidth = 0, originalBHeight = 0;
         cv::Point2i bestMatch(int currLvl, cv::Point2i currQ);
         cv::Point2i bestApproximateMatch(int currLvl, cv::Point2i currQ);
         cv::Point2i bestCoherenceMatch(int currLvl, cv::Point2i currQ);
+        void computeApproximateMatchesForLevel(int currLvl);
         float featureDistance(int currLvl, cv::Point2i currQ, cv::Point2i comparisonP);
     };
 

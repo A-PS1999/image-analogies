@@ -4,11 +4,11 @@
 
 namespace PatchMatch
 {
+    static std::mt19937 g_generator(std::random_device{}());
+
     std::vector<cv::Point2i> initNNFRandom(int widthB, int heightB, int widthA, int heightA)
     {
         std::vector<cv::Point2i> nnf(widthB * heightB);
-        std::random_device randDevice;
-        std::mt19937 generator(randDevice());
         std::uniform_int_distribution<> distX(0, widthA - 1);
         std::uniform_int_distribution<> distY(0, heightA - 1);
 
@@ -16,7 +16,7 @@ namespace PatchMatch
         {
             for (int x = 0; x < widthB; ++x)
             {
-                nnf[y * widthB + x] = cv::Point2i(distX(generator), distY(generator));
+                nnf[y * widthB + x] = cv::Point2i(distX(g_generator), distY(g_generator));
             }
         }
         return nnf;
@@ -87,8 +87,20 @@ namespace PatchMatch
                    int iterNum)
     {
         int width = imageB.cols;
+        int height = imageB.rows;
         bool isEven = iterNum % 2 == 0;
+        
+        if (patchPos.x < 0 || patchPos.x >= width || patchPos.y < 0 || patchPos.y >= height)
+        {
+            return;
+        }
+        
         int idx = patchPos.y * width + patchPos.x;
+        
+        if (idx < 0 || idx >= static_cast<int>(dists.size()))
+        {
+            return;
+        }
 
         if (!isEven)
         {
@@ -188,26 +200,36 @@ namespace PatchMatch
     {
         int img_width = imageB.cols;
         int img_height = imageB.rows;
+        
+        if (patchPos.x < 0 || patchPos.x >= img_width || patchPos.y < 0 || patchPos.y >= img_height)
+        {
+            return;
+        }
+        
+        int idx = patchPos.y * img_width + patchPos.x;
+        
+        if (idx < 0 || idx >= static_cast<int>(dists.size()))
+        {
+            return;
+        }
 
         std::uniform_real_distribution<float> range(-1.0f, 1.0f);
-        std::random_device randDevice;
-        std::mt19937 generator(randDevice());
 
         float current_radius = std::max(img_height, img_width);
         int i_param = 1;
 
-        cv::Point2i currBestPoint = nnf[patchPos.y * img_width + patchPos.x];
-        float currBestDist = dists[patchPos.y * img_width + patchPos.x];
+        cv::Point2i currBestPoint = nnf[idx];
+        float currBestDist = dists[idx];
         
         while (current_radius > 1.0f) {
-            float randX = range(generator);
-            float randY = range(generator);
+            float randX = range(g_generator);
+            float randY = range(g_generator);
 
-            cv::Point2i candidatePos;
-            candidatePos.x = currBestPoint.x + (current_radius * randX);
-            candidatePos.x = std::max(0, std::min(img_width - 1, candidatePos.x));
-            candidatePos.y = currBestPoint.y + (current_radius * randY);
-            candidatePos.y = std::max(0, std::min(img_height - 1, candidatePos.y));
+            int candidateX = currBestPoint.x + (int)(current_radius * randX);
+            int candidateY = currBestPoint.y + (int)(current_radius * randY);
+            candidateX = std::max(0, std::min(img_width - 1, candidateX));
+            candidateY = std::max(0, std::min(img_height - 1, candidateY));
+            cv::Point2i candidatePos(candidateX, candidateY);
 
             float candidateDist = computePatchDistance(imageA, imageB, patchPos, candidatePos, patchSize);
             if (candidateDist < currBestDist) {
@@ -219,7 +241,7 @@ namespace PatchMatch
             i_param += 1;
         }
 
-        nnf[patchPos.y * img_width + patchPos.x] = currBestPoint;
-        dists[patchPos.y * img_width + patchPos.x] = currBestDist;
+        nnf[idx] = currBestPoint;
+        dists[idx] = currBestDist;
     }
 }
