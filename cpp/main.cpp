@@ -1,7 +1,7 @@
-#include "../util/arg_parser.h"
-#include "../algo/image_analogy.h"
 #include "opencv2/imgcodecs.hpp"
 #include <iostream>
+#include "util/arg_parser.h"
+#include "algo/image_analogy.h"
 
 int main(int argc, char **argv)
 {
