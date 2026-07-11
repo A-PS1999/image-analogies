@@ -60,8 +60,30 @@ def preparePatches(pyramids: ImagePyramids,
         nextAPrimePatches = makePatches(nextLevelAPrime, patchSize, iPatch, jPatch)
         groupedPatches = np.concatenate((groupedPatches, nextAPatches, nextAPrimePatches), 1)
         
-    return groupedPatches
+    return iPatch, jPatch, groupedPatches
+
+def findCoherenceMatch(features: np.ndarray, pyramids: ImagePyramids, level: int, bPrimeLvl: np.ndarray, dimensions: int, i: int, j: int):
+    M = bPrimeLvl.shape[0]
+    N = bPrimeLvl.shape[1]
+    area = dimensions * dimensions
+    causalArea = area // 2
     
+    dims = (dimensions-1) // 2
+    iPix = np.arange(max(i-dims, 0), min(i-dims+dimensions, M))
+    jPix = np.arange(max(j-dims, 0), min(j-dims+dimensions, N))
+    [iPix2, jPix2] = np.meshgrid(iPix, jPix, indexing='ij')
+    iPix2 = iPix2.flatten()
+    jPix2 = jPix2.flatten()
+    
+    indices = bPrimeLvl[iPix2, jPix2]
+    iPix2 = iPix2[indices[:, 0] > -1]
+    jPix2 = jPix2[indices[:, 0] > -1]
+    indices = indices[indices[:, 0] > -1, :]
+    
+    iPix2 = indices[:, 0] - iPix2
+    jPix2 = indices[:, 1] - jPix2
+    
+    #TODO continue coherence match logic
 
 def generateAnalogy(pyramids: ImagePyramids, coherence: float) -> np.ndarray:
     """
@@ -86,7 +108,7 @@ def generateAnalogy(pyramids: ImagePyramids, coherence: float) -> np.ndarray:
         if level < pyramids.levels:
             combinedArea += patchArea * 2
         
-        preppedPatches = preparePatches(pyramids, level, currPatchSize, patchDimensions)
+        iPatch, jPatch, preppedPatches = preparePatches(pyramids, level, currPatchSize, patchDimensions)
         
         nearestNeighbours = NNDescent(preppedPatches)
         features = np.zeros(combinedArea)
@@ -107,8 +129,12 @@ def generateAnalogy(pyramids: ImagePyramids, coherence: float) -> np.ndarray:
                     features[patchArea*2+causalArea:] = nextLevelBPrime[i:i+currPatchSize, j:j+currPatchSize].flatten()
                     
                 idx, distance = nearestNeighbours.query(nearestNeighbours, features)
-                # TODO continue algorithm
-                    
+                distanceSquared = distance**2
+                idx = int(idx[0][0])
+                idx = [iPatch[idx], jPatch[idx]]
+                
+                if coherence > 0.0:
+                    (coherentIdx, coherentDist) = 
                 
     
     return pyramids.pyramidBPrime[0]

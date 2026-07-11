@@ -22,9 +22,9 @@ namespace PatchMatch
                    std::vector<cv::Point2i> &nnf,
                    std::vector<float> &dists,
                    int patchSize,
-                   int iterNum);
-    void randomSearch(cv::Mat &imageA,
-                      cv::Mat &imageB,
+                   bool isEven);
+    void randomSearch(const cv::Mat &imageA,
+                      const cv::Mat &imageB,
                       cv::Point2i patchPos,
                       std::vector<cv::Point2i> &nnf,
                       std::vector<float> &dists,

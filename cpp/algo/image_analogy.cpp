@@ -35,7 +35,7 @@ namespace ImageAnalogy
         this->pyramidB = pyramidB;
         this->pyramidBPrime = pyramidBPrime;
         this->coherenceWeight = coherenceWeight;
-        this->sourcePixelMapping.resize(pyramidB[0].cols * pyramidB[0].rows);
+        this->sourcePixelMapping.resize(pyramidB[0].cols * pyramidB[0].rows); // TODO initialize this differently
         this->levelNNF.resize(pyramidB.size());
         this->levelNNFDists.resize(pyramidB.size());
 
@@ -64,19 +64,19 @@ namespace ImageAnalogy
                 cv::Point2i currQ(x, y);
 
                 cv::Point2i matchPoint = bestMatch(l, currQ);
-                
+
                 if (q < static_cast<int>(sourcePixelMapping.size()))
                 {
-                    sourcePixelMapping[q] = matchPoint;
+                    sourcePixelMapping[l][q] = matchPoint;
                 }
-                
+
                 size_t featureIdx = static_cast<size_t>(matchPoint.y) * static_cast<size_t>(colsA) + static_cast<size_t>(matchPoint.x);
                 if (featureIdx < featureVectorsAPrime[l].features.size() && q < static_cast<int>(featureVectorsBPrime[l].features.size()))
                 {
                     featureVectorsBPrime[l].features[q] =
                         featureVectorsAPrime[l].features[featureIdx];
                 }
-                
+
                 cv::Vec3b pixelValue = pyramidAPrime[l].at<cv::Vec3b>(matchPoint.y, matchPoint.x);
                 pyramidBPrime[l].at<cv::Vec3b>(y, x) = pixelValue;
             }
@@ -102,7 +102,7 @@ namespace ImageAnalogy
         float distApprox = featureDistance(currLvl, currQ, bestApproxMatch);
         float distCoherence = featureDistance(currLvl, currQ, bestCohMatch);
 
-        float factorial = 1 + std::pow(2, (currLvl - maxLevels)) * cohWeight;
+        float factorial = 1 + std::pow(2, -currLvl) * cohWeight;
 
         if (distCoherence <= distApprox * factorial)
         {
@@ -127,23 +127,28 @@ namespace ImageAnalogy
         int numIterations = 5;
         for (int iter = 0; iter < numIterations; ++iter)
         {
-            // Propagation phase
-            for (int y = 0; y < heightB; ++y)
-            {
-                for (int x = 0; x < widthB; ++x)
-                {
-                    PatchMatch::propagate(pyramidA[currLvl], pyramidB[currLvl],
-                                          cv::Point2i(x, y), nnf, dists, FINE_PATCH_SIZE, iter);
-                }
-            }
+            bool isEven = iter % 2 == 0;
 
-            // Random search phase
-            for (int y = 0; y < heightB; ++y)
+            if (!isEven)
             {
-                for (int x = 0; x < widthB; ++x)
+                for (int y = 0; y < heightB; ++y)
                 {
-                    PatchMatch::randomSearch(pyramidA[currLvl], pyramidB[currLvl],
-                                             cv::Point2i(x, y), nnf, dists, FINE_PATCH_SIZE);
+                    for (int x = 0; x < widthB; ++x)
+                    {
+                        PatchMatch::propagate(pyramidA[currLvl], pyramidB[currLvl],
+                                              cv::Point2i(x, y), nnf, dists, FINE_PATCH_SIZE, isEven);
+                        PatchMatch::randomSearch(pyramidA[currLvl], pyramidB[currLvl],
+                                                 cv::Point2i(x, y), nnf, dists, FINE_PATCH_SIZE);
+                    }
+                }
+            } else {
+                for (int y = heightB; y > 0; --y) {
+                    for (int x = widthB; x > 0; --x) {
+                        PatchMatch::propagate(pyramidA[currLvl], pyramidB[currLvl],
+                                              cv::Point2i(x, y), nnf, dists, FINE_PATCH_SIZE, isEven);
+                        PatchMatch::randomSearch(pyramidA[currLvl], pyramidB[currLvl],
+                                                 cv::Point2i(x, y), nnf, dists, FINE_PATCH_SIZE);
+                    }
                 }
             }
         }
@@ -157,12 +162,12 @@ namespace ImageAnalogy
     {
         int widthB = pyramidB[currLvl].cols;
         size_t linearPosQ = static_cast<size_t>(currQ.y) * static_cast<size_t>(widthB) + static_cast<size_t>(currQ.x);
-        
+
         if (linearPosQ >= levelNNF[currLvl].size())
         {
             return cv::Point2i(0, 0);
         }
-        
+
         return levelNNF[currLvl][linearPosQ];
     }
 
@@ -177,9 +182,11 @@ namespace ImageAnalogy
         int heightA = pyramidA[currLvl].rows;
         size_t linearPosQ = static_cast<size_t>(currQ.y) * static_cast<size_t>(widthB) + static_cast<size_t>(currQ.x);
 
-        for (int dy = -FINE_PATCH_SIZE; dy <= FINE_PATCH_SIZE; ++dy)
+        int searchRadius = (FINE_PATCH_SIZE - 1) / 2;
+
+        for (int dy = -searchRadius; dy <= searchRadius; ++dy)
         {
-            for (int dx = -FINE_PATCH_SIZE; dx <= FINE_PATCH_SIZE; ++dx)
+            for (int dx = -searchRadius; dx <= searchRadius; ++dx)
             {
                 int rX = currQ.x + dx;
                 int rY = currQ.y + dy;
@@ -196,13 +203,13 @@ namespace ImageAnalogy
                 {
                     continue;
                 }
-                
+
                 if (linearPosR >= sourcePixelMapping.size())
                 {
                     continue;
                 }
 
-                cv::Point2i sourceR = sourcePixelMapping[linearPosR];
+                cv::Point2i sourceR = sourcePixelMapping[currLvl][linearPosR];
 
                 // s(r) + (q - r)
                 cv::Point2i candidateP = sourceR + (currQ - cv::Point2i(rX, rY));
@@ -237,7 +244,7 @@ namespace ImageAnalogy
         if (qIndex >= featureVectorsB[currLvl].features.size() ||
             pIndex >= featureVectorsA[currLvl].features.size())
         {
-            return std::numeric_limits<float>::max();  // Return max distance if out of bounds
+            return std::numeric_limits<float>::max(); // Return max distance if out of bounds
         }
 
         const float *pFeaturesA = &featureVectorsA[currLvl].features[pIndex];

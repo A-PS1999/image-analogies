@@ -47,7 +47,7 @@ namespace Util
             {
                 cv::Mat newLevel;
                 cv::Mat currLvlRef = reference[l];
-                newLevel.create(currLvlRef.size(), currLvlRef.type());
+                newLevel.zeros(currLvlRef.size(), currLvlRef.type());
                 dest.push_back(newLevel);
             }
         }
