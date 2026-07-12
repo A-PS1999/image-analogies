@@ -25,4 +25,4 @@ if __name__ == "__main__":
     
     outputImgBPrime = algorithm.generateAnalogy(pyramids, coherence)
     
-    
+    imageio.imwrite(outputImgBPrime)

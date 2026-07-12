@@ -68,22 +68,67 @@ def findCoherenceMatch(features: np.ndarray, pyramids: ImagePyramids, level: int
     area = dimensions * dimensions
     causalArea = area // 2
     
-    dims = (dimensions-1) // 2
-    iPix = np.arange(max(i-dims, 0), min(i-dims+dimensions, M))
-    jPix = np.arange(max(j-dims, 0), min(j-dims+dimensions, N))
-    [iPix2, jPix2] = np.meshgrid(iPix, jPix, indexing='ij')
-    iPix2 = iPix2.flatten()
-    jPix2 = jPix2.flatten()
+    halfPatch = (dimensions-1) // 2
+    iPix = np.arange(max(i-halfPatch, 0), min(i-halfPatch+dimensions, M))
+    jPix = np.arange(max(j-halfPatch, 0), min(j-halfPatch+dimensions, N))
+    [neighborRows, neighborCols] = np.meshgrid(iPix, jPix, indexing='ij')
+    neighborRows = neighborRows.flatten()
+    neighborCols = neighborCols.flatten()
     
-    indices = bPrimeLvl[iPix2, jPix2]
-    iPix2 = iPix2[indices[:, 0] > -1]
-    jPix2 = jPix2[indices[:, 0] > -1]
-    indices = indices[indices[:, 0] > -1, :]
+    sourceMapping = bPrimeLvl[neighborRows, neighborCols]
+    candidateRows = neighborRows[sourceMapping[:, 0] > -1]
+    candidateCols = neighborCols[sourceMapping[:, 0] > -1]
+    sourceMapping = sourceMapping[sourceMapping[:, 0] > -1, :]
     
-    iPix2 = indices[:, 0] - iPix2
-    jPix2 = indices[:, 1] - jPix2
+    candidateRows = sourceMapping[:, 0] - candidateRows
+    candidateCols = sourceMapping[:, 1] - candidateCols
     
-    #TODO continue coherence match logic
+    paddedA = np.pad(pyramids.pyramidA[level], dimensions)
+    paddedAPrime = np.pad(pyramids.pyramidAPrime[level], dimensions)
+    
+    unpaddedRows = paddedAPrime.shape[0] - 2*halfPatch
+    unpaddedCols = paddedAPrime.shape[1] - 2*halfPatch
+    
+    isValid = (candidateRows >= 0)*(candidateRows < unpaddedRows)*(candidateCols >= 0)*(candidateCols < unpaddedCols)
+    candidateRows = candidateRows[isValid]
+    candidateCols = candidateCols[isValid]
+    
+    if candidateRows.size == 0:
+        return [-1, -1], np.inf
+    
+    patchOffsets = np.arange(dimensions)
+    patchI, patchJ = np.meshgrid(patchOffsets, patchOffsets, indexing='ij')
+    patchI = patchI.flatten()
+    patchJ = patchJ.flatten()
+    candidatePatchRows = (candidateRows[:, None] + patchI[None, :])
+    patchShape = candidatePatchRows.shape
+    candidatePatchCols = (candidateCols[:, None] + patchJ[None, :])
+    flatRows = candidatePatchRows.flatten()
+    flatCols = candidatePatchCols.flatten()
+    
+    squareDists = np.zeros(flatRows.size)
+    Y = np.reshape(paddedA[flatRows, flatCols], patchShape)
+    X = features[0:area]
+    squareDists += np.sum(X**2) + np.sum(Y**2, axis=1) - 2 * (Y.dot(X)).flatten()
+    
+    Y = np.reshape(paddedAPrime[flatRows, flatCols], patchShape)
+    X = features[area:area+causalArea]
+    squareDists += np.sum(X**2) + np.sum(Y**2, axis=1) - 2 * (Y.dot(X)).flatten()
+    
+    parentPyrA = np.pad(resizeImg(pyramids.pyramidA[level+1],  pyramids.pyramidA[level].shape), halfPatch)
+    parentPyrAPrime = np.pad(resizeImg(pyramids.pyramidAPrime[level+1],  pyramids.pyramidAPrime[level].shape), halfPatch)
+    
+    if (parentPyrA.size > 0):
+        Y = np.reshape(parentPyrA[flatRows, flatCols], patchShape)
+        X = features[area+causalArea:area*2+causalArea]
+        squareDists += np.sum(X**2) + np.sum(Y**2, axis=1) - 2 * (Y.dot(X)).flatten()
+        
+        Y = np.reshape(parentPyrAPrime[flatRows, flatCols], patchShape)
+        X = features[area*2+causalArea:]
+        squareDists += np.sum(X**2) + np.sum(Y**2, axis=1) - 2 * (Y.dot(X)).flatten()
+        
+    bestIdx = np.argmin(squareDists)
+    return [candidateRows[bestIdx], candidateCols[bestIdx]], squareDists[bestIdx]
 
 def generateAnalogy(pyramids: ImagePyramids, coherence: float) -> np.ndarray:
     """
@@ -134,8 +179,13 @@ def generateAnalogy(pyramids: ImagePyramids, coherence: float) -> np.ndarray:
                 idx = [iPatch[idx], jPatch[idx]]
                 
                 if coherence > 0.0:
-                    (coherentIdx, coherentDist) = 
+                    (coherentIdx, coherentDist) = findCoherenceMatch(features, pyramids, level, sourceMapping[level], currPatchSize, i, j)
+                    factorial = 1 + coherence * (2.0 ** (level - pyramids.levels))
+                    if (coherentDist < distanceSquared * factorial * factorial):
+                        idx = coherentIdx
                 
+                sourceMapping[level][i, j, :] = idx
+                pyramids.pyramidBPrime[level][i, j] = pyramids.pyramidAPrime[level][idx[0], idx[1]]
     
     return pyramids.pyramidBPrime[0]
         
