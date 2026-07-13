@@ -106,17 +106,20 @@ def findCoherenceMatch(features: np.ndarray, pyramids: ImagePyramids, level: int
     flatRows = candidatePatchRows.flatten()
     flatCols = candidatePatchCols.flatten()
     
-    squareDists = np.zeros(flatRows.size)
+    squareDists = np.zeros(candidateRows.size)
     Y = np.reshape(paddedA[flatRows, flatCols], patchShape)
     X = features[0:area]
     squareDists += np.sum(X**2) + np.sum(Y**2, axis=1) - 2 * (Y.dot(X)).flatten()
     
-    Y = np.reshape(paddedAPrime[flatRows, flatCols], patchShape)
+    Y = np.reshape(paddedAPrime[flatRows, flatCols], patchShape)[:, 0:causalArea]
     X = features[area:area+causalArea]
     squareDists += np.sum(X**2) + np.sum(Y**2, axis=1) - 2 * (Y.dot(X)).flatten()
     
-    parentPyrA = np.pad(resizeImg(pyramids.pyramidA[level+1],  pyramids.pyramidA[level].shape), halfPatch)
-    parentPyrAPrime = np.pad(resizeImg(pyramids.pyramidAPrime[level+1],  pyramids.pyramidAPrime[level].shape), halfPatch)
+    parentPyrA = np.array([])
+    parentPyrAPrime = np.array([])
+    if level < pyramids.levels:
+        parentPyrA = np.pad(resizeImg(pyramids.pyramidA[level+1],  pyramids.pyramidA[level].shape), dimensions)
+        parentPyrAPrime = np.pad(resizeImg(pyramids.pyramidAPrime[level+1],  pyramids.pyramidAPrime[level].shape), dimensions)
     
     if (parentPyrA.size > 0):
         Y = np.reshape(parentPyrA[flatRows, flatCols], patchShape)
@@ -138,7 +141,7 @@ def generateAnalogy(pyramids: ImagePyramids, coherence: float) -> np.ndarray:
     sourceMapping = []
     
     for level in range(len(pyramids.pyramidB)):
-        sourceMapping.append(-1 * np.ones(pyramids.pyramidB[level].shape[:2], dtype=int))
+        sourceMapping.append(-1 * np.ones((*pyramids.pyramidB[level].shape[:2], 2), dtype=int))
         
     for level in range(pyramids.levels, -1, -1):
         currPatchSize = FINE_PATCH_SIZE
@@ -160,6 +163,8 @@ def generateAnalogy(pyramids: ImagePyramids, coherence: float) -> np.ndarray:
         
         paddedB = np.pad(pyramids.pyramidB[level], patchDimensions)
         paddedBPrime = np.pad(pyramids.pyramidBPrime[level], patchDimensions)
+        nextLevelB = np.array([])
+        nextLevelBPrime = np.array([])
         if level < pyramids.levels:
             nextLevelB = np.pad(resizeImg(pyramids.pyramidB[level+1], pyramids.pyramidB[level].shape), patchDimensions)
             nextLevelBPrime = np.pad(resizeImg(pyramids.pyramidBPrime[level+1], pyramids.pyramidBPrime[level].shape), patchDimensions)
@@ -173,7 +178,7 @@ def generateAnalogy(pyramids: ImagePyramids, coherence: float) -> np.ndarray:
                     features[patchArea+causalArea:patchArea*2+causalArea] = nextLevelB[i:i+currPatchSize, j:j+currPatchSize].flatten()
                     features[patchArea*2+causalArea:] = nextLevelBPrime[i:i+currPatchSize, j:j+currPatchSize].flatten()
                     
-                idx, distance = nearestNeighbours.query(nearestNeighbours, features)
+                idx, distance = nearestNeighbours.query(features[None, :], k=1)
                 distanceSquared = distance**2
                 idx = int(idx[0][0])
                 idx = [iPatch[idx], jPatch[idx]]
@@ -186,6 +191,7 @@ def generateAnalogy(pyramids: ImagePyramids, coherence: float) -> np.ndarray:
                 
                 sourceMapping[level][i, j, :] = idx
                 pyramids.pyramidBPrime[level][i, j] = pyramids.pyramidAPrime[level][idx[0], idx[1]]
+                paddedBPrime[i + patchDimensions, j + patchDimensions] = pyramids.pyramidAPrime[level][idx[0], idx[1]]
     
     return pyramids.pyramidBPrime[0]
         
