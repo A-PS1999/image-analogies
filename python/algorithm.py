@@ -144,6 +144,7 @@ def generateAnalogy(pyramids: ImagePyramids, coherence: float) -> np.ndarray:
         sourceMapping.append(-1 * np.ones((*pyramids.pyramidB[level].shape[:2], 2), dtype=int))
         
     for level in range(pyramids.levels, -1, -1):
+        print("Processing level " + str(level))
         currPatchSize = FINE_PATCH_SIZE
         if (level == pyramids.levels):
             currPatchSize = COARSE_PATCH_SIZE
@@ -169,6 +170,7 @@ def generateAnalogy(pyramids: ImagePyramids, coherence: float) -> np.ndarray:
             nextLevelB = np.pad(resizeImg(pyramids.pyramidB[level+1], pyramids.pyramidB[level].shape), patchDimensions)
             nextLevelBPrime = np.pad(resizeImg(pyramids.pyramidBPrime[level+1], pyramids.pyramidBPrime[level].shape), patchDimensions)
         
+        print("Entering loop over pyramid B")
         for i in range(pyramids.pyramidBPrime[level].shape[0]):
             for j in range(pyramids.pyramidBPrime[level].shape[1]):
                 features[0:patchArea] = paddedB[i:i+currPatchSize, j:j+currPatchSize].flatten()
@@ -192,6 +194,7 @@ def generateAnalogy(pyramids: ImagePyramids, coherence: float) -> np.ndarray:
                 sourceMapping[level][i, j, :] = idx
                 pyramids.pyramidBPrime[level][i, j] = pyramids.pyramidAPrime[level][idx[0], idx[1]]
                 paddedBPrime[i + patchDimensions, j + patchDimensions] = pyramids.pyramidAPrime[level][idx[0], idx[1]]
+        print("Completed processing level " + str(level))
     
     return pyramids.pyramidBPrime[0]
         
