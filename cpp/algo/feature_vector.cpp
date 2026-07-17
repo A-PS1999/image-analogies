@@ -1,13 +1,9 @@
 #include "feature_vector.h"
 #include <algorithm>
+#include "opencv2/imgproc.hpp"
 
 namespace ImageAnalogy
 {
-    static const int FINE_WINDOW_SIZE = 5;
-    static const int COARSE_WINDOW_SIZE = 3;
-    static const int VEC_SIZE = (FINE_WINDOW_SIZE * FINE_WINDOW_SIZE * 4) +
-                                (COARSE_WINDOW_SIZE * COARSE_WINDOW_SIZE * 4);
-
     int FeatureVectorExtractor::extractWindow(const cv::Mat &image,
                                               int x,
                                               int y,
@@ -26,10 +22,9 @@ namespace ImageAnalogy
                 int sampleY = std::clamp(y + dy, 0, image.rows - 1);
 
                 cv::Vec3b pixel = image.at<cv::Vec3b>(sampleY, sampleX);
-                outVec.features[basePos + pos++] = pixel[0] / 255.0f;                                                    // B
-                outVec.features[basePos + pos++] = pixel[1] / 255.0f;                                                    // G
-                outVec.features[basePos + pos++] = pixel[2] / 255.0f;                                                    // R
-                outVec.features[basePos + pos++] = (0.299f * pixel[2] + 0.587f * pixel[1] + 0.114f * pixel[0]) / 255.0f; // Y
+                outVec.features[basePos + pos++] = pixel[0] / 255.0f;            // L
+                outVec.features[basePos + pos++] = (pixel[1] - 128.0f) / 256.0f; // a
+                outVec.features[basePos + pos++] = (pixel[2] - 128.0f) / 256.0f; // b
             }
         }
         return pos;
@@ -43,6 +38,16 @@ namespace ImageAnalogy
         int height = currLevel.rows;
         featureVec.features.resize(width * height * VEC_SIZE, 0.0f);
 
+        // Image converted to L*a*b* for feature vectors
+        cv::Mat currLevelLab;
+        cv::cvtColor(currLevel, currLevelLab, cv::COLOR_BGR2Lab);
+
+        cv::Mat coarseLevelLab;
+        if (coarseLevel.data)
+        {
+            cv::cvtColor(coarseLevel, coarseLevelLab, cv::COLOR_BGR2Lab);
+        }
+
         for (int y = 0; y < height; ++y)
         {
             for (int x = 0; x < width; ++x)
@@ -50,11 +55,11 @@ namespace ImageAnalogy
                 size_t basePos = (static_cast<size_t>(y) * width + x) * VEC_SIZE;
                 int localPixPos = 0;
 
-                localPixPos = extractWindow(currLevel, x, y, FINE_WINDOW_SIZE, basePos, localPixPos, featureVec);
+                localPixPos = extractWindow(currLevelLab, x, y, FINE_SIZE, basePos, localPixPos, featureVec);
 
-                if (coarseLevel.data)
+                if (coarseLevelLab.data)
                 {
-                    extractWindow(coarseLevel, x / 2, y / 2, COARSE_WINDOW_SIZE, basePos, localPixPos, featureVec);
+                    extractWindow(coarseLevelLab, x / 2, y / 2, COARSE_SIZE, basePos, localPixPos, featureVec);
                 }
             }
         }

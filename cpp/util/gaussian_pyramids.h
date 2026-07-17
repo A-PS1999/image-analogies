@@ -9,6 +9,7 @@ namespace Util
     namespace GaussianPyramids
     {
         void buildPyramid(const cv::Mat &input, std::vector<cv::Mat> &pyramid, int levels = 5);
+        void initSourceMappingPyr(std::vector<std::vector<cv::Point2i>> &sourceMap, const std::vector<cv::Mat> &sourcePyr);
         void buildEmptyPyramid(const std::vector<cv::Mat> &reference, std::vector<cv::Mat> &dest);
         int getPaddedSize(int originalSize, int divisibilityFactor);
     } // namespace GaussianPyramids

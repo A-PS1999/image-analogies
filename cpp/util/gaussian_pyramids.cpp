@@ -39,6 +39,15 @@ namespace Util
             }
         }
 
+        void initSourceMappingPyr(std::vector<std::vector<cv::Point2i>> &sourceMap, const std::vector<cv::Mat> &sourcePyr) {
+            int numLevels = sourcePyr.size();
+            cv::Point2i defaultPoint(-1, -1);
+            
+            for (int l = 0; l < numLevels; ++l) {
+                sourceMap[l] = std::vector<cv::Point2i>(sourcePyr[l].cols * sourcePyr[l].rows, defaultPoint);
+            }
+        }
+
         void buildEmptyPyramid(const std::vector<cv::Mat> &reference, std::vector<cv::Mat> &dest)
         {
             int numLevels = reference.size();

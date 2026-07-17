@@ -13,6 +13,7 @@ add_executable(image-analogies
     algo/feature_vector.cpp
     algo/image_analogy.cpp)
 
+list(APPEND CMAKE_PREFIX_PATH "C:/msys64/mingw64")
 find_package(OpenCV REQUIRED)
 target_include_directories(image-analogies PRIVATE
     ${OpenCV_INCLUDE_DIRS} 

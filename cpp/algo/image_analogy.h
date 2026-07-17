@@ -16,8 +16,6 @@ namespace ImageAnalogy
     class ImageAnalogyMaker
     {
     public:
-        const int FINE_PATCH_SIZE = 5;
-        const int COARSE_PATCH_SIZE = 3;
         ImageAnalogyMaker(const std::string &imageAPath,
                           const std::string &imageAPrimePath,
                           const std::string &imageBPath,
