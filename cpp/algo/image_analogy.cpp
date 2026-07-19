@@ -1,6 +1,7 @@
 #include "image_analogy.h"
 #include "gaussian_pyramids.h"
 #include "patchmatch.h"
+#include "opencv2/imgproc.hpp"
 #include "opencv2/imgcodecs.hpp"
 #include <algorithm>
 #include <iostream>
@@ -30,6 +31,18 @@ namespace ImageAnalogy
         Util::GaussianPyramids::buildPyramid(imageB, pyramidB);
         Util::GaussianPyramids::initSourceMappingPyr(sourcePixelMapping, pyramidB);
         Util::GaussianPyramids::buildEmptyPyramid(pyramidB, pyramidBPrime);
+        pyramidBPrimeLab.resize(pyramidBPrime.size());
+        for (int i = 0; i < pyramidBPrime.size(); ++i)
+        {
+            pyramidBPrimeLab[i].create(pyramidBPrime[i].size(), pyramidBPrime[i].type());
+            pyramidBPrimeLab[i].setTo(cv::Scalar::all(0));
+        }
+
+        pyramidAPrimeLab.resize(pyramidAPrime.size());
+        for (int i = 0; i < pyramidAPrime.size(); ++i)
+        {
+            cv::cvtColor(pyramidAPrime[i], pyramidAPrimeLab[i], cv::COLOR_BGR2Lab);
+        }
 
         this->pyramidA = pyramidA;
         this->pyramidAPrime = pyramidAPrime;
@@ -52,6 +65,9 @@ namespace ImageAnalogy
         for (int l = numLevels - 1; l >= 0; --l)
         {
             computeApproximateMatchesForLevel(l);
+            FeatureVectorExtractor::precomputeCoarseFeatures(l,
+                                                             pyramidBPrime,
+                                                             featureVectorsBPrime);
 
             int lvlLength = pyramidBPrime[l].cols * pyramidBPrime[l].rows;
             int colsB = pyramidBPrime[l].cols;
@@ -72,6 +88,20 @@ namespace ImageAnalogy
 
                 cv::Vec3b pixelValue = pyramidAPrime[l].at<cv::Vec3b>(matchPoint.y, matchPoint.x);
                 pyramidBPrime[l].at<cv::Vec3b>(y, x) = pixelValue;
+
+                pyramidBPrimeLab[l].at<cv::Vec3b>(y, x) =
+                    pyramidAPrimeLab[l].at<cv::Vec3b>(matchPoint.y, matchPoint.x);
+
+                FeatureVectorExtractor::recomputeFineFeatures(l,
+                                                              x,
+                                                              y,
+                                                              pyramidBPrimeLab,
+                                                              featureVectorsBPrime);
+                FeatureVectorExtractor::recomputeCausalNeighbours(l,
+                                                                  x,
+                                                                  y,
+                                                                  pyramidBPrimeLab,
+                                                                  featureVectorsBPrime);
             }
         }
 
@@ -134,9 +164,13 @@ namespace ImageAnalogy
                                                  cv::Point2i(x, y), nnf, dists, FINE_SIZE);
                     }
                 }
-            } else {
-                for (int y = heightB; y > 0; --y) {
-                    for (int x = widthB; x > 0; --x) {
+            }
+            else
+            {
+                for (int y = heightB; y > 0; --y)
+                {
+                    for (int x = widthB; x > 0; --x)
+                    {
                         PatchMatch::propagate(pyramidA[currLvl], pyramidB[currLvl],
                                               cv::Point2i(x, y), nnf, dists, FINE_SIZE, isEven);
                         PatchMatch::randomSearch(pyramidA[currLvl], pyramidB[currLvl],

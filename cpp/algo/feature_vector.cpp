@@ -65,6 +65,94 @@ namespace ImageAnalogy
         }
     }
 
+    void FeatureVectorExtractor::precomputeCoarseFeatures(int level,
+                                  const std::vector<cv::Mat> &pyramid,
+                                  std::vector<FeatureVector> &featureVecs)
+    {
+        int width = pyramid[level].cols;
+        int height = pyramid[level].rows;
+
+        bool hasCoarser = (level + 1 < pyramid.size());
+        cv::Mat coarseLab;
+        if (hasCoarser)
+        {
+            cv::cvtColor(pyramid[level + 1], coarseLab, cv::COLOR_BGR2Lab);
+        }
+
+        for (int y = 0; y < height; ++y)
+        {
+            for (int x = 0; x < width; ++x)
+            {
+                size_t basePos = (static_cast<size_t>(y) * width + x) * VEC_SIZE;
+                if (hasCoarser)
+                {
+                    FeatureVectorExtractor::extractWindow(coarseLab,
+                                                          x / 2,
+                                                          y / 2,
+                                                          COARSE_SIZE,
+                                                          basePos,
+                                                          FINE_BLOCK_SIZE,
+                                                          featureVecs[level]);
+                }
+                else
+                {
+                    std::fill_n(&featureVecs[level].features[basePos + FINE_BLOCK_SIZE],
+                                COARSE_BLOCK_SIZE,
+                                0.0f);
+                }
+            }
+        }
+    }
+
+    void FeatureVectorExtractor::recomputeFineFeatures(int level,
+                               int x,
+                               int y,
+                               const std::vector<cv::Mat> &pyramid,
+                               std::vector<FeatureVector> &featureVecs)
+    {
+        const cv::Mat &fineImg = pyramid[level];
+        int width = fineImg.cols;
+
+        size_t basePos = (static_cast<size_t>(y) * width + x) * VEC_SIZE;
+        FeatureVectorExtractor::extractWindow(fineImg,
+                                              x,
+                                              y,
+                                              FINE_SIZE,
+                                              basePos,
+                                              0,
+                                              featureVecs[level]);
+    }
+
+    void FeatureVectorExtractor::recomputeCausalNeighbours(int level,
+                                   int x,
+                                   int y,
+                                   const std::vector<cv::Mat> &pyramid,
+                                   std::vector<FeatureVector> &featureVecs)
+    {
+        const std::vector<std::pair<int, int>> directions = {
+            {0, -1}, {-1, -1}, {-1, 0}, {1, -1}};
+
+        int width = pyramid[level].cols;
+        int height = pyramid[level].rows;
+
+        size_t linearPosQ = static_cast<size_t>(y) * width + x;
+
+        for (const auto &[dx, dy] : directions)
+        {
+            int newX = x + dx;
+            int newY = y + dy;
+
+            if (newX < 0 || newY < 0 || newX >= width || newY >= height)
+                continue;
+
+            size_t linearPosR = static_cast<size_t>(newY) * width + newX;
+            if (linearPosR >= linearPosQ)
+                continue;
+
+            recomputeFineFeatures(level, newX, newY, pyramid, featureVecs);
+        }
+    }
+
     void FeatureVectorExtractor::computeFullPyramidFeatures(const std::vector<cv::Mat> &pyramid,
                                                             std::vector<FeatureVector> &featureVector)
     {

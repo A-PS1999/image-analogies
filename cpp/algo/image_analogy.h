@@ -24,7 +24,8 @@ namespace ImageAnalogy
 
     private:
         float coherenceWeight = 5.0;
-        std::vector<cv::Mat> pyramidA, pyramidAPrime, pyramidB, pyramidBPrime;
+        std::vector<cv::Mat> pyramidA, pyramidAPrime, pyramidB, pyramidBPrime, pyramidBPrimeLab;
+        std::vector<cv::Mat> pyramidAPrimeLab;
         std::vector<FeatureVector> featureVectorsA, featureVectorsAPrime, featureVectorsB, featureVectorsBPrime;
         std::vector<std::vector<cv::Point2i>> sourcePixelMapping;
         std::vector<std::vector<cv::Point2i>> levelNNF;
