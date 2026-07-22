@@ -37,7 +37,7 @@ namespace PatchMatch
                 size_t idx = static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x);
                 if (idx >= dists.size())
                 {
-                    continue;  // Bounds check to prevent overflow access
+                    continue; // Bounds check to prevent overflow access
                 }
                 dists[idx] = computePatchDistance(imageA, imageB, nnf[idx], cv::Point2i(x, y), patchSize);
             }
@@ -45,11 +45,39 @@ namespace PatchMatch
         return dists;
     }
 
+    std::vector<cv::Point2i> upsampleNNF(std::vector<cv::Point2i> &nnf,
+                                         cv::Size coarseSize,
+                                         cv::Size currASize,
+                                         cv::Size currBSize)
+    {
+        std::vector<cv::Point2i> upsampledNNF(currBSize.width * currBSize.height);
+
+        for (int y = 0; y < currBSize.height; ++y)
+        {
+            for (int x = 0; x < currBSize.width; ++x)
+            {
+                int coarseX = std::min(x / 2, coarseSize.width - 1);
+                int coarseY = std::min(y / 2, coarseSize.height - 1);
+                cv::Point2i coarseOffset = nnf[coarseY * coarseSize.width + coarseX];
+
+                int fineX = coarseOffset.x * 2 + (x % 2);
+                int fineY = coarseOffset.y * 2 + (y % 2);
+                fineX = std::clamp(fineX, 0, currASize.width - 1);
+                fineY = std::clamp(fineY, 0, currASize.height - 1);
+
+                upsampledNNF[y * currBSize.width + x] = cv::Point2i(fineX, fineY);
+            }
+        }
+
+        return upsampledNNF;
+    }
+
     float computePatchDistance(const cv::Mat &imageA,
                                const cv::Mat &imageB,
                                cv::Point2i posA,
                                cv::Point2i posB,
-                               int patchSize)
+                               int patchSize,
+                               float currentBestDist)
     {
         float dist = 0.0f;
         int patchRadius = patchSize / 2;
@@ -71,19 +99,14 @@ namespace PatchMatch
                 float db2 = pixelB[2] - pixelA[2];
 
                 dist += db0 * db0 + db1 * db1 + db2 * db2;
+                if (dist >= currentBestDist)
+                {
+                    return std::numeric_limits<float>::max();
+                }
             }
         }
         return dist;
     }
-
-    enum class Source
-    {
-        Left,
-        Up,
-        Current,
-        Right,
-        Down
-    };
 
     static bool tryPropagateFromNeighbor(
         const cv::Mat &imageA,
@@ -102,7 +125,7 @@ namespace PatchMatch
             return false;
 
         cv::Point2i candidateMatch = nnf[neighborIdx] + (patchPos - neighborPos);
-        float newDist = computePatchDistance(imageA, imageB, candidateMatch, patchPos, patchSize);
+        float newDist = computePatchDistance(imageA, imageB, candidateMatch, patchPos, patchSize, dists[idx]);
         if (newDist < dists[idx])
         {
             nnf[idx] = candidateMatch;
@@ -122,14 +145,14 @@ namespace PatchMatch
     {
         int width = imageB.cols;
         int height = imageB.rows;
-        
+
         if (patchPos.x < 0 || patchPos.x >= width || patchPos.y < 0 || patchPos.y >= height)
         {
             return;
         }
-        
+
         int idx = patchPos.y * width + patchPos.x;
-        
+
         if (idx < 0 || idx >= static_cast<int>(dists.size()))
         {
             return;
@@ -137,63 +160,21 @@ namespace PatchMatch
 
         if (!isEven)
         {
-            std::vector<std::pair<float, Source>> candidates;
-            candidates.push_back({dists[idx], Source::Current});
-
-            if (patchPos.x > 0)
-            {
-                int neighborIdx = patchPos.y * width + (patchPos.x - 1);
-                if (neighborIdx < static_cast<int>(dists.size()))
-                {
-                    candidates.push_back({dists[neighborIdx], Source::Left});
-                }
-            }
-            if (patchPos.y > 0)
-            {
-                int neighborIdx = (patchPos.y - 1) * width + patchPos.x;
-                if (neighborIdx < static_cast<int>(dists.size()))
-                {
-                    candidates.push_back({dists[neighborIdx], Source::Up});
-                }
-            }
-
-            Source minDistSrc = std::min_element(candidates.begin(), candidates.end(),
-                [](const auto &a, const auto &b) { return a.first < b.first; })->second;
-
-            if (minDistSrc == Source::Left)
+            if (patchPos.x > 0) {
                 tryPropagateFromNeighbor(imageA, imageB, patchPos, {patchPos.x - 1, patchPos.y}, nnf, dists, patchSize);
-            else if (minDistSrc == Source::Up)
+            }
+            if (patchPos.y > 0) {
                 tryPropagateFromNeighbor(imageA, imageB, patchPos, {patchPos.x, patchPos.y - 1}, nnf, dists, patchSize);
+            }
         }
         else
         {
-            std::vector<std::pair<float, Source>> candidates;
-            candidates.push_back({dists[idx], Source::Current});
-
-            if (patchPos.x < width - 1)
-            {
-                int neighborIdx = patchPos.y * width + (patchPos.x + 1);
-                if (neighborIdx < static_cast<int>(dists.size()))
-                {
-                    candidates.push_back({dists[neighborIdx], Source::Right});
-                }
-            }
-            if (patchPos.y < height - 1)
-            {
-                int neighborIdx = (patchPos.y + 1) * width + patchPos.x;
-                if (neighborIdx < static_cast<int>(dists.size()))
-                {
-                    candidates.push_back({dists[neighborIdx], Source::Down});
-                }
-            }
-
-            Source minDistSrc = std::min_element(candidates.begin(), candidates.end(),
-                [](const auto &a, const auto &b) { return a.first < b.first; })->second;
-
-            if (minDistSrc == Source::Right)
+            if (patchPos.x < width - 1) {
                 tryPropagateFromNeighbor(imageA, imageB, patchPos, {patchPos.x + 1, patchPos.y}, nnf, dists, patchSize);
-            else if (minDistSrc == Source::Down)
+            }
+            if (patchPos.y < height - 1) {
                 tryPropagateFromNeighbor(imageA, imageB, patchPos, {patchPos.x, patchPos.y + 1}, nnf, dists, patchSize);
+            }
         }
     }
 
@@ -205,16 +186,16 @@ namespace PatchMatch
                       int patchSize,
                       float alpha)
     {
-        int img_width = imageB.cols;
-        int img_height = imageB.rows;
-        
+        int img_width = imageA.cols;
+        int img_height = imageA.rows;
+
         if (patchPos.x < 0 || patchPos.x >= img_width || patchPos.y < 0 || patchPos.y >= img_height)
         {
             return;
         }
-        
+
         int idx = patchPos.y * img_width + patchPos.x;
-        
+
         if (idx < 0 || idx >= static_cast<int>(dists.size()))
         {
             return;
@@ -226,8 +207,9 @@ namespace PatchMatch
 
         cv::Point2i currBestPoint = nnf[idx];
         float currBestDist = dists[idx];
-        
-        while (current_radius > 1.0f) {
+
+        while (current_radius > 1.0f)
+        {
             float randX = range(g_generator);
             float randY = range(g_generator);
 
@@ -237,8 +219,9 @@ namespace PatchMatch
             candidateY = std::max(0, std::min(img_height - 1, candidateY));
             cv::Point2i candidatePos(candidateX, candidateY);
 
-            float candidateDist = computePatchDistance(imageA, imageB, candidatePos, patchPos, patchSize);
-            if (candidateDist < currBestDist) {
+            float candidateDist = computePatchDistance(imageA, imageB, candidatePos, patchPos, patchSize, currBestDist);
+            if (candidateDist < currBestDist)
+            {
                 currBestDist = candidateDist;
                 currBestPoint = candidatePos;
             }

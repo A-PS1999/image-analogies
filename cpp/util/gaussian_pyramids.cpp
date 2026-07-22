@@ -39,11 +39,14 @@ namespace Util
             }
         }
 
-        void initSourceMappingPyr(std::vector<std::vector<cv::Point2i>> &sourceMap, const std::vector<cv::Mat> &sourcePyr) {
+        void initSourceMappingPyr(std::vector<std::vector<cv::Point2i>> &sourceMap, const std::vector<cv::Mat> &sourcePyr)
+        {
             int numLevels = sourcePyr.size();
+            sourceMap.resize(numLevels);
             cv::Point2i defaultPoint(-1, -1);
-            
-            for (int l = 0; l < numLevels; ++l) {
+
+            for (int l = 0; l < numLevels; ++l)
+            {
                 sourceMap[l] = std::vector<cv::Point2i>(sourcePyr[l].cols * sourcePyr[l].rows, defaultPoint);
             }
         }
@@ -51,14 +54,34 @@ namespace Util
         void buildEmptyPyramid(const std::vector<cv::Mat> &reference, std::vector<cv::Mat> &dest)
         {
             int numLevels = reference.size();
-            
+
             for (int l = 0; l < numLevels; ++l)
             {
-                cv::Mat newLevel;
                 cv::Mat currLvlRef = reference[l];
-                newLevel.zeros(currLvlRef.size(), currLvlRef.type());
+                cv::Mat newLevel = cv::Mat::zeros(currLvlRef.size(), currLvlRef.type());
                 dest.push_back(newLevel);
             }
+        }
+
+        void upsamplePyramid(int level,
+                             std::vector<cv::Mat> &pyramid,
+                             std::vector<cv::Mat> &labPyr)
+        {
+            cv::Mat upsampledImg;
+            cv::pyrUp(pyramid[level + 1],
+                      upsampledImg,
+                      cv::Size(pyramid[level].cols, pyramid[level].rows));
+            if (upsampledImg.size() != pyramid[level].size())
+            {
+                cv::resize(upsampledImg,
+                           upsampledImg,
+                           pyramid[level].size(),
+                           0.0,
+                           0.0,
+                           cv::INTER_LINEAR);
+            }
+            upsampledImg.copyTo(pyramid[level]);
+            cv::cvtColor(pyramid[level], labPyr[level], cv::COLOR_BGR2Lab);
         }
     } // namespace GaussianPyramids
 } // namespace Util

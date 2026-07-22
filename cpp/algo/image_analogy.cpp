@@ -65,6 +65,15 @@ namespace ImageAnalogy
         for (int l = numLevels - 1; l >= 0; --l)
         {
             computeApproximateMatchesForLevel(l);
+            if (l < numLevels - 1)
+            {
+                Util::GaussianPyramids::upsamplePyramid(l,
+                                                        pyramidBPrime,
+                                                        pyramidBPrimeLab);
+                FeatureVectorExtractor::computeLevelFeatures(pyramidBPrime[l],
+                                                             pyramidBPrime[l + 1],
+                                                             featureVectorsBPrime[l]);
+            }
             FeatureVectorExtractor::precomputeCoarseFeatures(l,
                                                              pyramidBPrime,
                                                              featureVectorsBPrime);
@@ -144,7 +153,18 @@ namespace ImageAnalogy
         int widthB = pyramidB[currLvl].cols;
         int heightB = pyramidB[currLvl].rows;
 
-        std::vector<cv::Point2i> nnf = PatchMatch::initNNFRandom(widthA, heightA, widthB, heightB);
+        std::vector<cv::Point2i> nnf;
+        if (currLvl < pyramidA.size() - 1 && !levelNNF[currLvl + 1].empty())
+        {
+            nnf = PatchMatch::upsampleNNF(levelNNF[currLvl + 1],
+                                          pyramidB[currLvl + 1].size(),
+                                          pyramidA[currLvl].size(),
+                                          pyramidB[currLvl].size());
+        }
+        else
+        {
+            nnf = PatchMatch::initNNFRandom(widthA, heightA, widthB, heightB);
+        }
         std::vector<float> dists = PatchMatch::initNNFDists(pyramidA[currLvl], pyramidB[currLvl], nnf, FINE_SIZE);
 
         int numIterations = 5;
@@ -167,9 +187,9 @@ namespace ImageAnalogy
             }
             else
             {
-                for (int y = heightB; y > 0; --y)
+                for (int y = heightB - 1; y >= 0; --y)
                 {
-                    for (int x = widthB; x > 0; --x)
+                    for (int x = widthB - 1; x >= 0; --x)
                     {
                         PatchMatch::propagate(pyramidA[currLvl], pyramidB[currLvl],
                                               cv::Point2i(x, y), nnf, dists, FINE_SIZE, isEven);
