@@ -1,35 +1,24 @@
 #include "patchmatch.h"
-#include <random>
 #include <algorithm>
 
 namespace PatchMatch
 {
-    static std::mt19937 g_generator(std::random_device{}());
-
-    std::vector<cv::Point2i> initNNFRandom(int widthA, int heightA, int widthB, int heightB)
+    void NNF::initRandom(int widthA, int heightA, std::mt19937& rng)
     {
-        std::vector<cv::Point2i> nnf(widthB * heightB);
         std::uniform_int_distribution<> distX(0, widthA - 1);
         std::uniform_int_distribution<> distY(0, heightA - 1);
 
-        for (int y = 0; y < heightB; ++y)
+        for (int y = 0; y < height; ++y)
         {
-            for (int x = 0; x < widthB; ++x)
+            for (int x = 0; x < width; ++x)
             {
-                nnf[y * widthB + x] = cv::Point2i(distX(g_generator), distY(g_generator));
+                offsets[y * width + x] = cv::Point2i(distX(rng), distY(rng));
             }
         }
-        return nnf;
     }
 
-    std::vector<float> initNNFDists(const cv::Mat &imageA,
-                                    const cv::Mat &imageB,
-                                    const std::vector<cv::Point2i> &nnf,
-                                    int patchSize)
+    void NNF::initDists(const cv::Mat& imageA, const cv::Mat& imageB, int patchSize)
     {
-        int width = imageB.cols;
-        int height = imageB.rows;
-        std::vector<float> dists(width * height, std::numeric_limits<float>::max());
         for (int y = 0; y < height; ++y)
         {
             for (int x = 0; x < width; ++x)
@@ -37,43 +26,35 @@ namespace PatchMatch
                 size_t idx = static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x);
                 if (idx >= dists.size())
                 {
-                    continue; // Bounds check to prevent overflow access
+                    continue; // Bounds check preserved from original
                 }
-                dists[idx] = computePatchDistance(imageA, imageB, nnf[idx], cv::Point2i(x, y), patchSize);
+                dists[idx] = computePatchDistance(imageA, imageB, offsets[idx], cv::Point2i(x, y), patchSize);
             }
         }
-        return dists;
     }
 
-    std::vector<cv::Point2i> upsampleNNF(std::vector<cv::Point2i> &nnf,
-                                         cv::Size coarseSize,
-                                         cv::Size currASize,
-                                         cv::Size currBSize)
+    void NNF::upsampleFrom(const NNF& coarse, cv::Size currASize)
     {
-        std::vector<cv::Point2i> upsampledNNF(currBSize.width * currBSize.height);
-
-        for (int y = 0; y < currBSize.height; ++y)
+        for (int y = 0; y < height; ++y)
         {
-            for (int x = 0; x < currBSize.width; ++x)
+            for (int x = 0; x < width; ++x)
             {
-                int coarseX = std::min(x / 2, coarseSize.width - 1);
-                int coarseY = std::min(y / 2, coarseSize.height - 1);
-                cv::Point2i coarseOffset = nnf[coarseY * coarseSize.width + coarseX];
+                int coarseX = std::min(x / 2, coarse.width - 1);
+                int coarseY = std::min(y / 2, coarse.height - 1);
+                cv::Point2i coarseOffset = coarse.offsets[coarseY * coarse.width + coarseX];
 
                 int fineX = coarseOffset.x * 2 + (x % 2);
                 int fineY = coarseOffset.y * 2 + (y % 2);
                 fineX = std::clamp(fineX, 0, currASize.width - 1);
                 fineY = std::clamp(fineY, 0, currASize.height - 1);
 
-                upsampledNNF[y * currBSize.width + x] = cv::Point2i(fineX, fineY);
+                offsets[y * width + x] = cv::Point2i(fineX, fineY);
             }
         }
-
-        return upsampledNNF;
     }
 
-    float computePatchDistance(const cv::Mat &imageA,
-                               const cv::Mat &imageB,
+    float computePatchDistance(const cv::Mat& imageA,
+                               const cv::Mat& imageB,
                                cv::Point2i posA,
                                cv::Point2i posB,
                                int patchSize,
@@ -109,39 +90,36 @@ namespace PatchMatch
     }
 
     static bool tryPropagateFromNeighbor(
-        const cv::Mat &imageA,
-        const cv::Mat &imageB,
+        const cv::Mat& imageA,
+        const cv::Mat& imageB,
         cv::Point2i patchPos,
         cv::Point2i neighborPos,
-        std::vector<cv::Point2i> &nnf,
-        std::vector<float> &dists,
+        NNF& nnf,
         int patchSize)
     {
         int width = imageB.cols;
         int neighborIdx = neighborPos.y * width + neighborPos.x;
         int idx = patchPos.y * width + patchPos.x;
 
-        if (neighborIdx < 0 || neighborIdx >= static_cast<int>(nnf.size()))
+        if (neighborIdx < 0 || neighborIdx >= static_cast<int>(nnf.offsets.size()))
             return false;
 
-        cv::Point2i candidateMatch = nnf[neighborIdx] + (patchPos - neighborPos);
-        float newDist = computePatchDistance(imageA, imageB, candidateMatch, patchPos, patchSize, dists[idx]);
-        if (newDist < dists[idx])
+        cv::Point2i candidateMatch = nnf.offsets[neighborIdx] + (patchPos - neighborPos);
+        float newDist = computePatchDistance(imageA, imageB, candidateMatch, patchPos, patchSize, nnf.dists[idx]);
+        if (newDist < nnf.dists[idx])
         {
-            nnf[idx] = candidateMatch;
-            dists[idx] = newDist;
+            nnf.offsets[idx] = candidateMatch;
+            nnf.dists[idx] = newDist;
             return true;
         }
         return false;
     }
 
-    void propagate(const cv::Mat &imageA,
-                   const cv::Mat &imageB,
-                   cv::Point2i patchPos,
-                   std::vector<cv::Point2i> &nnf,
-                   std::vector<float> &dists,
-                   int patchSize,
-                   bool isEven)
+    void NNF::propagate(const cv::Mat& imageA,
+                        const cv::Mat& imageB,
+                        cv::Point2i patchPos,
+                        int patchSize,
+                        bool isEven)
     {
         int width = imageB.cols;
         int height = imageB.rows;
@@ -161,30 +139,29 @@ namespace PatchMatch
         if (!isEven)
         {
             if (patchPos.x > 0) {
-                tryPropagateFromNeighbor(imageA, imageB, patchPos, {patchPos.x - 1, patchPos.y}, nnf, dists, patchSize);
+                tryPropagateFromNeighbor(imageA, imageB, patchPos, {patchPos.x - 1, patchPos.y}, *this, patchSize);
             }
             if (patchPos.y > 0) {
-                tryPropagateFromNeighbor(imageA, imageB, patchPos, {patchPos.x, patchPos.y - 1}, nnf, dists, patchSize);
+                tryPropagateFromNeighbor(imageA, imageB, patchPos, {patchPos.x, patchPos.y - 1}, *this, patchSize);
             }
         }
         else
         {
             if (patchPos.x < width - 1) {
-                tryPropagateFromNeighbor(imageA, imageB, patchPos, {patchPos.x + 1, patchPos.y}, nnf, dists, patchSize);
+                tryPropagateFromNeighbor(imageA, imageB, patchPos, {patchPos.x + 1, patchPos.y}, *this, patchSize);
             }
             if (patchPos.y < height - 1) {
-                tryPropagateFromNeighbor(imageA, imageB, patchPos, {patchPos.x, patchPos.y + 1}, nnf, dists, patchSize);
+                tryPropagateFromNeighbor(imageA, imageB, patchPos, {patchPos.x, patchPos.y + 1}, *this, patchSize);
             }
         }
     }
 
-    void randomSearch(const cv::Mat &imageA,
-                      const cv::Mat &imageB,
-                      cv::Point2i patchPos,
-                      std::vector<cv::Point2i> &nnf,
-                      std::vector<float> &dists,
-                      int patchSize,
-                      float alpha)
+    void NNF::randomSearch(const cv::Mat& imageA,
+                          const cv::Mat& imageB,
+                          cv::Point2i patchPos,
+                          int patchSize,
+                          float alpha,
+                          std::mt19937& rng)
     {
         int img_width = imageA.cols;
         int img_height = imageA.rows;
@@ -205,13 +182,13 @@ namespace PatchMatch
 
         float current_radius = std::max(img_height, img_width);
 
-        cv::Point2i currBestPoint = nnf[idx];
+        cv::Point2i currBestPoint = offsets[idx];
         float currBestDist = dists[idx];
 
         while (current_radius > 1.0f)
         {
-            float randX = range(g_generator);
-            float randY = range(g_generator);
+            float randX = range(rng);
+            float randY = range(rng);
 
             int candidateX = currBestPoint.x + (int)(current_radius * randX);
             int candidateY = currBestPoint.y + (int)(current_radius * randY);
@@ -229,7 +206,7 @@ namespace PatchMatch
             current_radius *= alpha;
         }
 
-        nnf[idx] = currBestPoint;
+        offsets[idx] = currBestPoint;
         dists[idx] = currBestDist;
     }
 }
