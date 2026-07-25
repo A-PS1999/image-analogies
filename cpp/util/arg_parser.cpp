@@ -100,7 +100,7 @@ namespace Util
                 {
                     return std::stof(coherenceArg->value);
                 }
-                catch (const std::exception &e)
+                catch (const std::exception _)
                 {
                     std::cerr << "Invalid coherence weight value: " << coherenceArg->value << ". Using default value of 5.0." << std::endl;
                     return DEFAULT_COHERENCE_WEIGHT;

@@ -24,10 +24,6 @@ namespace PatchMatch
             for (int x = 0; x < width; ++x)
             {
                 size_t idx = static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x);
-                if (idx >= dists.size())
-                {
-                    continue; // Bounds check preserved from original
-                }
                 dists[idx] = computePatchDistance(imageA, imageB, offsets[idx], cv::Point2i(x, y), patchSize);
             }
         }

@@ -8,9 +8,9 @@
 
 namespace ImageAnalogy
 {
-    ImageAnalogyMaker::ImageAnalogyMaker(const std::string& imageAPath,
-                                         const std::string& imageAPrimePath,
-                                         const std::string& imageBPath,
+    ImageAnalogyMaker::ImageAnalogyMaker(const std::string &imageAPath,
+                                         const std::string &imageAPrimePath,
+                                         const std::string &imageBPath,
                                          const float coherenceWeight)
     {
         cv::Mat imageA = cv::imread(imageAPath, cv::IMREAD_COLOR);
@@ -41,11 +41,6 @@ namespace ImageAnalogy
             levels[i].B = pyramidB[i];
             levels[i].BPrime = pyramidBPrime[i];
 
-            levels[i].BPrimeLab.create(pyramidBPrime[i].size(), pyramidBPrime[i].type());
-            levels[i].BPrimeLab.setTo(cv::Scalar::all(0));
-
-            cv::cvtColor(levels[i].APrime, levels[i].APrimeLab, cv::COLOR_BGR2Lab);
-
             levels[i].sourceMap.assign(pyramidB[i].cols * pyramidB[i].rows, cv::Point2i(-1, -1));
         }
 
@@ -65,11 +60,9 @@ namespace ImageAnalogy
         int numLevels = levels.size();
 
         std::vector<cv::Mat> bPrimeMats(numLevels);
-        std::vector<cv::Mat> bPrimeLabMats(numLevels);
         for (int i = 0; i < numLevels; ++i)
         {
             bPrimeMats[i] = levels[i].BPrime;
-            bPrimeLabMats[i] = levels[i].BPrimeLab;
         }
 
         for (int l = numLevels - 1; l >= 0; --l)
@@ -77,9 +70,8 @@ namespace ImageAnalogy
             computeApproximateMatchesForLevel(l);
             if (l < numLevels - 1)
             {
-                Util::GaussianPyramids::upsamplePyramid(l, bPrimeMats, bPrimeLabMats);
+                Util::GaussianPyramids::upsamplePyramid(l, bPrimeMats);
                 levels[l].BPrime = bPrimeMats[l];
-                levels[l].BPrimeLab = bPrimeLabMats[l];
                 FeatureVectorExtractor::computeLevelFeatures(levels, l, FeatureSelector::FEAT_B_PRIME);
             }
             FeatureVectorExtractor::precomputeCoarseFeatures(levels, l);
@@ -96,16 +88,10 @@ namespace ImageAnalogy
 
                 cv::Point2i matchPoint = bestMatch(l, currQ);
 
-                if (q < static_cast<int>(levels[l].sourceMap.size()))
-                {
-                    levels[l].sourceMap[q] = matchPoint;
-                }
+                levels[l].sourceMap[q] = matchPoint;
 
                 cv::Vec3b pixelValue = levels[l].APrime.at<cv::Vec3b>(matchPoint.y, matchPoint.x);
                 levels[l].BPrime.at<cv::Vec3b>(y, x) = pixelValue;
-
-                levels[l].BPrimeLab.at<cv::Vec3b>(y, x) =
-                    levels[l].APrimeLab.at<cv::Vec3b>(matchPoint.y, matchPoint.x);
 
                 FeatureVectorExtractor::recomputeFineFeatures(levels, l, x, y);
                 FeatureVectorExtractor::recomputeCausalNeighbours(levels, l, x, y);
@@ -124,14 +110,13 @@ namespace ImageAnalogy
 
     cv::Point2i ImageAnalogyMaker::bestMatch(int currLvl, cv::Point2i currQ)
     {
-        float cohWeight = coherenceWeight;
         cv::Point2i bestApproxMatch = bestApproximateMatch(currLvl, currQ);
         cv::Point2i bestCohMatch = bestCoherenceMatch(currLvl, currQ);
 
         float distApprox = featureDistance(currLvl, currQ, bestApproxMatch);
         float distCoherence = featureDistance(currLvl, currQ, bestCohMatch);
 
-        float factorial = 1 + std::pow(2, -currLvl) * cohWeight;
+        float factorial = 1 + std::pow(2, -currLvl) * coherenceWeight;
 
         if (distCoherence <= distApprox * factorial)
         {
@@ -272,9 +257,16 @@ namespace ImageAnalogy
         return rStar;
     }
 
+    static bool isOutOfBounds(cv::Point2i currQ, int dx, int dy, int width, int height)
+    {
+        return currQ.x + dx < 0 || currQ.x + dx >= width ||
+               currQ.y + dy < 0 || currQ.y + dy >= height;
+    }
+
     float ImageAnalogyMaker::featureDistance(int currLvl, cv::Point2i currQ, cv::Point2i comparisonP)
     {
         int widthB = levels[currLvl].B.cols;
+        int heightB = levels[currLvl].B.rows;
         int widthA = levels[currLvl].A.cols;
 
         size_t qIndex = (static_cast<size_t>(currQ.y) * static_cast<size_t>(widthB) + static_cast<size_t>(currQ.x)) * VEC_SIZE;
@@ -286,21 +278,68 @@ namespace ImageAnalogy
             return std::numeric_limits<float>::max();
         }
 
-        const float* pFeaturesA = &levels[currLvl].featA.features[pIndex];
-        const float* pFeaturesAPrime = &levels[currLvl].featAPrime.features[pIndex];
-        const float* qFeaturesB = &levels[currLvl].featB.features[qIndex];
-        const float* qFeaturesBPrime = &levels[currLvl].featBPrime.features[qIndex];
+        const float *pFeaturesA = &levels[currLvl].featA.features[pIndex];
+        const float *pFeaturesAPrime = &levels[currLvl].featAPrime.features[pIndex];
+        const float *qFeaturesB = &levels[currLvl].featB.features[qIndex];
+        const float *qFeaturesBPrime = &levels[currLvl].featBPrime.features[qIndex];
 
+        int radius = FINE_SIZE / 2;
         float distanceSquared = 0.0f;
 
-        for (int i = 0; i < VEC_SIZE; ++i)
+        float fineSumAB = 0.0f;
+        for (int i = 0; i < FINE_BLOCK_SIZE; ++i)
         {
-            float diffAB = pFeaturesA[i] - qFeaturesB[i];
-            distanceSquared += diffAB * diffAB;
-
-            float diffAPrimeBPrime = pFeaturesAPrime[i] - qFeaturesBPrime[i];
-            distanceSquared += diffAPrimeBPrime * diffAPrimeBPrime;
+            float w = FINE_WEIGHTS[i];
+            float d = pFeaturesA[i] - qFeaturesB[i];
+            fineSumAB += w * d * d;
         }
+        distanceSquared += fineSumAB / FINE_WEIGHT_SUM;
+
+        float coarseSumAB = 0.0f;
+        for (int i = FINE_BLOCK_SIZE; i < VEC_SIZE; ++i)
+        {
+            float w = COARSE_WEIGHTS[i - FINE_BLOCK_SIZE];
+            float d = pFeaturesA[i] - qFeaturesB[i];
+            coarseSumAB += w * d * d;
+        }
+        distanceSquared += coarseSumAB / COARSE_WEIGHT_SUM;
+
+        float fineSumABP = 0.0f;
+        float fineActiveWeight = 0.0f;
+        for (int dy = -radius; dy <= radius; ++dy)
+        {
+            for (int dx = -radius; dx <= radius; ++dx)
+            {
+                if (dy > 0 || (dy == 0 && dx >= 0)) {
+                    continue;
+                }
+                if (isOutOfBounds(currQ, dx, dy, widthB, heightB)) {
+                    continue;
+                }
+                int slot = ((dy + radius) * FINE_SIZE + (dx + radius)) * NUM_CHANNELS;
+                float w = FINE_WEIGHTS[slot];
+                for (int k = 0; k < NUM_CHANNELS; ++k)
+                {
+                    float d = pFeaturesAPrime[slot + k] - qFeaturesBPrime[slot + k];
+                    fineSumABP += w * d * d;
+                }
+                fineActiveWeight += w * NUM_CHANNELS;
+            }
+        }
+        // Account for edge case
+        if (fineActiveWeight > 0.0f)
+        {
+            distanceSquared += fineSumABP / fineActiveWeight;
+        }
+
+        float coarseSumABP = 0.0f;
+        for (int i = FINE_BLOCK_SIZE; i < VEC_SIZE; ++i)
+        {
+            float w = COARSE_WEIGHTS[i - FINE_BLOCK_SIZE];
+            float d = pFeaturesAPrime[i] - qFeaturesBPrime[i];
+            coarseSumABP += w * d * d;
+        }
+        distanceSquared += coarseSumABP / COARSE_WEIGHT_SUM;
 
         return distanceSquared;
     }

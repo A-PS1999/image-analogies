@@ -10,7 +10,7 @@ namespace ImageAnalogy
 {
     struct LevelState
     {
-        cv::Mat A, APrime, B, BPrime, BPrimeLab, APrimeLab;
+        cv::Mat A, APrime, B, BPrime;
         FeatureVector featA, featAPrime, featB, featBPrime;
         std::vector<cv::Point2i> sourceMap;
         PatchMatch::NNF nnf;

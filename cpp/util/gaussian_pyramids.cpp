@@ -64,8 +64,7 @@ namespace Util
         }
 
         void upsamplePyramid(int level,
-                             std::vector<cv::Mat> &pyramid,
-                             std::vector<cv::Mat> &labPyr)
+                             std::vector<cv::Mat> &pyramid)
         {
             cv::Mat upsampledImg;
             cv::pyrUp(pyramid[level + 1],
@@ -81,7 +80,6 @@ namespace Util
                            cv::INTER_LINEAR);
             }
             upsampledImg.copyTo(pyramid[level]);
-            cv::cvtColor(pyramid[level], labPyr[level], cv::COLOR_BGR2Lab);
         }
     } // namespace GaussianPyramids
 } // namespace Util

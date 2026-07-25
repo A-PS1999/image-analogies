@@ -11,7 +11,7 @@ namespace Util
         void buildPyramid(const cv::Mat &input, std::vector<cv::Mat> &pyramid, int levels = 5);
         void initSourceMappingPyr(std::vector<std::vector<cv::Point2i>> &sourceMap, const std::vector<cv::Mat> &sourcePyr);
         void buildEmptyPyramid(const std::vector<cv::Mat> &reference, std::vector<cv::Mat> &dest);
-        void upsamplePyramid(int level, std::vector<cv::Mat> &pyramid, std::vector<cv::Mat> &labPyr);
+        void upsamplePyramid(int level, std::vector<cv::Mat> &pyramid);
         int getPaddedSize(int originalSize, int divisibilityFactor);
     } // namespace GaussianPyramids
 } // namespace Util

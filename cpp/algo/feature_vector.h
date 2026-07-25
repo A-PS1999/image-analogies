@@ -2,6 +2,7 @@
 #define FEATURE_VECTOR_H
 
 #include <vector>
+#include <array>
 #include "opencv2/core.hpp"
 
 namespace ImageAnalogy
@@ -12,6 +13,11 @@ namespace ImageAnalogy
     const int FINE_BLOCK_SIZE = (FINE_SIZE * FINE_SIZE * NUM_CHANNELS);
     const int COARSE_BLOCK_SIZE = (COARSE_SIZE * COARSE_SIZE * NUM_CHANNELS);
     const int VEC_SIZE = FINE_BLOCK_SIZE + COARSE_BLOCK_SIZE;
+
+    extern const std::array<float, FINE_BLOCK_SIZE> FINE_WEIGHTS;
+    extern const std::array<float, COARSE_BLOCK_SIZE> COARSE_WEIGHTS;
+    extern const float FINE_WEIGHT_SUM;
+    extern const float COARSE_WEIGHT_SUM;
 
     enum class FeatureSelector { FEAT_A, FEAT_A_PRIME, FEAT_B, FEAT_B_PRIME };
 
